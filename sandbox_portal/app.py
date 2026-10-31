@@ -35,6 +35,15 @@ SESSIONS: dict[str, dict] = {}
 SMS: list[dict] = []
 COUNTER = {"sch": 100000, "grv": 1000}
 
+# All states and union territories, so citizens from anywhere can file in the sandbox.
+STATES = [
+    "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh",
+    "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir",
+    "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+    "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+    "Uttar Pradesh", "Uttarakhand", "West Bengal",
+]
+# Sample districts used only by the eligibility page's state list.
 DISTRICTS = {
     "Bihar": ["Patna", "Gaya", "Muzaffarpur", "Bhagalpur"],
     "Delhi": ["New Delhi", "North Delhi", "South Delhi"],
@@ -273,11 +282,11 @@ def sch1(request: Request, err: str = ""):
 <label for="dob">Date of Birth</label><input type="date" id="dob" name="dob" value="{esc(a.get('dob'))}">
 <label for="gender">Gender</label><select id="gender" name="gender">{options(["Male", "Female", "Transgender"], a.get('gender', ''))}</select>
 <label for="email">Email Address</label><input type="email" id="email" name="email" value="{esc(a.get('email'))}">
-<label for="state">State of Domicile</label><select id="state" name="state">{options(DISTRICTS, a.get('state', ''))}</select>
-<label for="district">District</label><select id="district" name="district">{options(DISTRICTS.get(a.get('state', ''), []), a.get('district', ''))}</select>
+<label for="state">State of Domicile</label><select id="state" name="state">{options(STATES, a.get('state', ''))}</select>
+<label for="district">District</label><input type="text" id="district" name="district" maxlength="60" value="{esc(a.get('district'))}">
 <label for="category">Category</label><select id="category" name="category">{options(["General", "OBC", "SC", "ST", "EWS"], a.get('category', ''))}</select>
 <button type="submit" id="next1">Save &amp; Next</button>
-</form>{CASCADE_JS}<script>cascade('state','district','/api/districts?state=')</script>""", err), sid)
+</form>""", err), sid)
 
 
 @app.post("/scholarship/apply/1")
@@ -290,8 +299,8 @@ def sch1_post(request: Request, fullName: str = Form(""), dob: str = Form(""), g
     missing = [n for n, v in [("Applicant Name", fullName), ("Date of Birth", dob), ("Gender", gender), ("Email", email), ("State", state), ("District", district), ("Category", category)] if not v]
     if missing:
         return sch1(request, err="Please fill: " + ", ".join(missing))
-    if district not in DISTRICTS.get(state, []):
-        return sch1(request, err="Selected district does not belong to the selected state.")
+    if state not in STATES:
+        return sch1(request, err="Select a valid state.")
     if "v4_interstitial" in variants() and not s.get("read_instructions"):
         return with_cookie(RedirectResponse("/scholarship/instructions", 303), sid)
     return with_cookie(RedirectResponse("/scholarship/apply/2", 303), sid)
@@ -504,13 +513,13 @@ def grv_form(request: Request, err: str = ""):
 <label for="ministry">Ministry / Department</label><select id="ministry" name="ministry">{options(MINISTRIES, g.get('ministry', ''))}</select>
 <label for="department">Sub-department</label><select id="department" name="department">{options(MINISTRIES.get(g.get('ministry', ''), []), g.get('department', ''))}</select>
 <label for="grvCategory">Grievance Category</label><select id="grvCategory" name="category">{options(["Road and Bridges", "Water Supply", "Sanitation and Garbage", "Street Lights", "Pollution", "Other"], g.get('category', ''))}</select>
-<label for="grvState">State</label><select id="grvState" name="state">{options(DISTRICTS, g.get('state', ''))}</select>
-<label for="grvDistrict">District</label><select id="grvDistrict" name="district">{options(DISTRICTS.get(g.get('state', ''), []), g.get('district', ''))}</select>
+<label for="grvState">State</label><select id="grvState" name="state">{options(STATES, g.get('state', ''))}</select>
+<label for="grvDistrict">District / City</label><input type="text" id="grvDistrict" name="district" maxlength="60" value="{esc(g.get('district'))}">
 <label for="subject">Subject</label><input type="text" id="subject" name="subject" maxlength="150" value="{esc(g.get('subject'))}">
 <label for="grievanceDesc">Grievance Description (max 4000 characters)</label><textarea id="grievanceDesc" name="description" maxlength="4000">{esc(g.get('description'))}</textarea>
 <label for="attachment">Supporting Document (optional, PDF/JPG, max 1 MB)</label><input type="file" id="attachment" name="attachment" accept=".pdf,.jpg,.jpeg">
 <button type="submit" id="grvNext">Next</button>
-</form>{CASCADE_JS}<script>cascade('ministry','department','/api/departments?ministry=');cascade('grvState','grvDistrict','/api/districts?state=')</script>""", err), sid)
+</form>{CASCADE_JS}<script>cascade('ministry','department','/api/departments?ministry=')</script>""", err), sid)
 
 
 @app.post("/grievance/lodge")

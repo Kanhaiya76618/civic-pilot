@@ -102,6 +102,7 @@ INJECTION_PATTERNS = re.compile(
 
 GUARDED_BUTTON = re.compile(r"\b(final submit|submit|pay|payment|confirm|lodge|register|proceed to pay|make payment)\b", re.I)
 NAV_BUTTON = re.compile(r"\b(next|continue|submit|search|proceed|save|verify|apply|find|check|results?)\b", re.I)
+SEARCH_FIELD = re.compile(r"\b(search|query|keywords?|q)\b", re.I)
 PAYMENT_BUTTON = re.compile(r"\b(pay|payment|proceed to pay|make payment)\b", re.I)
 AUTO_ID = re.compile(r"(\d{4,}|[a-f0-9]{8,}|^(ext|ember|react|mui|ctl\d+)[-_]|__)", re.I)
 
@@ -144,7 +145,8 @@ class Snapshot:
 
         return Snapshot(
             url=self.url, title=self.title, headings=self.headings, messages=self.messages, frame_count=self.frame_count,
-            fields=keep(self.fields, max_fields, lambda f: 3 * (not f.get("value") and not f.get("checked")) + 2 * bool(f.get("required"))),
+            fields=keep(self.fields, max_fields, lambda f: 3 * (not f.get("value") and not f.get("checked")) + 2 * bool(f.get("required"))
+                        + 8 * is_search_field(f) - 4 * (f.get("type") in {"checkbox", "radio"} and not (f.get("label") or f.get("id") or f.get("name")))),
             buttons=keep(self.buttons, max_buttons, lambda b: 5 * bool(NAV_BUTTON.search(b.get("text") or ""))),
             suspicious=self.suspicious, read_only=self.read_only,
         )
@@ -173,6 +175,11 @@ class Snapshot:
             for m in self.messages:
                 lines.append(f"  - {m['kind']}: {m['text']!r}")
         return "\n".join(lines)
+
+
+def is_search_field(f: dict) -> bool:
+    """A site's own search box: always worth showing the model (long filter lists would otherwise crowd it out)."""
+    return f.get("type") == "search" or any(SEARCH_FIELD.search(str(f.get(k) or "")) for k in ("name", "id", "placeholder", "label"))
 
 
 def is_guarded(button: dict, read_only: bool = False) -> bool:

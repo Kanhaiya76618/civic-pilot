@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field
 
 from .config import settings
 from .db import Store
-from .public_app import make_router
+from .console import make_console_router
+from .public_app import make_router, mount_spa, spa_index
 from .models import TERMINAL_STATUSES, ApplicationTask, CitizenProfile, ConsentRecord, Receipt, TaskStatus, TaskView
 from .receipts import verify
 from .vault import VaultError
@@ -71,6 +72,7 @@ def make_app(executor_factory=None) -> FastAPI:
         return state["executor"]
 
     app.include_router(make_router(ex))
+    app.include_router(make_console_router(ex))
 
     def require_key(x_api_key: str | None = Header(None)) -> None:
         if settings.api_key and x_api_key != settings.api_key:
@@ -227,7 +229,7 @@ def make_app(executor_factory=None) -> FastAPI:
     # ------------------------------------------------------------------ citizen API
     @app.get("/citizen/{task_id}", response_class=HTMLResponse)
     async def citizen_page(row=Depends(citizen)):
-        return (STATIC / "citizen.html").read_text()
+        return spa_index()
 
     @app.get("/citizen/{task_id}/state")
     async def citizen_state(task_id: str, row=Depends(citizen)):
@@ -261,6 +263,17 @@ def make_app(executor_factory=None) -> FastAPI:
             "timing": timing,
             "receipt": ex().store.get_receipt(receipt_id) if receipt_id else None,
             "log": [{"kind": e["kind"], "message": e["message"], "step_id": e["step_id"]} for e in events[-30:]],
+            "task_id": task_id,
+            "mode": task.get("mode"),
+            "strategy": task.get("strategy", "auto"),
+            "created_at": row["created_at"],
+            "page_url": ch.page.url if ch and ch.page and not ch.page.is_closed() else None,
+            "has_final": (settings.evidence_dir / task_id / "final.png").exists(),
+            "events": [
+                {"seq": e["seq"], "kind": e["kind"], "status": e["status"], "message": e["message"], "step_id": e["step_id"], "at": e["at"],
+                 "data": {k: v for k, v in e["data"].items() if k in {"do", "label", "value", "host", "kind", "actions", "turn", "status", "model_ms", "result"}}}
+                for e in events
+            ],
         }
 
     @app.post("/citizen/{task_id}/approve")
@@ -280,6 +293,13 @@ def make_app(executor_factory=None) -> FastAPI:
         if not ex().gateway.human_cancel(task_id):
             raise HTTPException(409, "no human step is pending")
         return {"ok": True}
+
+    @app.get("/citizen/{task_id}/final.png")
+    async def citizen_final(task_id: str, row=Depends(citizen)):
+        path = settings.evidence_dir / task_id / "final.png"
+        if not path.exists():
+            raise HTTPException(404, "no screenshot")
+        return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     @app.get("/citizen/{task_id}/approval.png")
     async def citizen_screenshot(task_id: str, row=Depends(citizen)):
@@ -326,6 +346,7 @@ def make_app(executor_factory=None) -> FastAPI:
             sender.cancel()
             live.subscribers.discard(q)
 
+    mount_spa(app)  # last: the React app's catch-all routes
     return app
 
 

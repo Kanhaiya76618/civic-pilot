@@ -16,7 +16,20 @@ inputs:
   - {key: subject, label: Subject, free_text: true, max_len: 150}
   - {key: description, label: Description, free_text: true, max_len: 4000}
   - {key: pincode, label: PIN code of the problem location, required: false, pattern: "[1-9]\\d{5}", verify: pincode}
+  # For the public map only (rounded to ~1 km there); never typed into the portal.
+  - {key: latitude, label: Latitude, required: false, pattern: "-?\\d{1,2}\\.\\d{1,7}"}
+  - {key: longitude, label: Longitude, required: false, pattern: "-?\\d{1,3}\\.\\d{1,7}"}
   - {key: mobile, source: vault, label: Mobile number}
+
+# Which office handles each category (the same routing the Report-a-problem page uses).
+derive:
+  category:
+    Road and Bridges: {ministry: Ministry of Road Transport and Highways, department: Road Safety}
+    Water Supply: {ministry: Ministry of Housing and Urban Affairs, department: Municipal Services}
+    Sanitation and Garbage: {ministry: Ministry of Housing and Urban Affairs, department: Swachh Bharat Mission (Urban)}
+    Street Lights: {ministry: Ministry of Housing and Urban Affairs, department: Municipal Services}
+    Pollution: {ministry: "Ministry of Environment, Forest and Climate Change", department: Pollution Control}
+    Other: {ministry: Ministry of Housing and Urban Affairs, department: Municipal Services}
 
 documents:
   - {key: attachment, label: Supporting photo or document, required: false, max_kb: 1024, formats: [pdf, jpg], max_px: 2000}
@@ -66,9 +79,8 @@ steps:
     target: {id: grvState}
     value: "{{input.state}}"
     label: State
-    wait_options: {id: grvDistrict}
-  - id: select_district
-    do: select
+  - id: fill_district
+    do: fill
     target: {id: grvDistrict}
     value: "{{input.district}}"
     label: District

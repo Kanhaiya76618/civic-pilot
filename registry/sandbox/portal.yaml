@@ -16,3 +16,4 @@ notes: >
   which must never be tested on real government portals.
   Reproduces OTP login, a 4-page wizard, cascading dropdowns, strict upload
   limits, CAPTCHA and session timeout.
+about: Our sandbox replica of a state services portal, for filings only (post-matric scholarship application, public grievance). Needs OTP login.

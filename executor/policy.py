@@ -143,6 +143,10 @@ class PolicyGate:
         if missing:
             raise PolicyError(f"vault is missing: {sorted(missing)}")
 
+    def busy(self, portal: Portal) -> bool:
+        sem = self._locks.get(portal.portal_id)
+        return bool(sem and sem.locked())
+
     async def acquire(self, portal: Portal) -> asyncio.Semaphore:
         """One live session per portal (by default), with a jittered gap between sessions."""
         sem = self._locks.setdefault(portal.portal_id, asyncio.Semaphore(portal.rate_limit.max_concurrent))

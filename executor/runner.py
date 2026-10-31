@@ -24,7 +24,7 @@ from playwright.async_api import TimeoutError as PWTimeout
 from .config import settings
 from .db import Store
 from .docprep import PreparedDoc
-from .handoff import Gateway, HumanRequest
+from .handoff import FOCUS_FIRST_EMPTY_JS, Gateway, HumanRequest
 from .healer import Healer
 from .locators import LocatorError, build, resolve
 from .models import ApplicationTask, TaskEvent, TaskMode, TaskStatus, Timing
@@ -574,6 +574,11 @@ class RouteRunner:
                 await field_loc.focus(timeout=3000)
             except PWError:
                 pass
+        else:
+            try:
+                await self.page.evaluate(FOCUS_FIRST_EMPTY_JS)
+            except PWError:
+                pass
         req = HumanRequest(step_id, kind, instructions)
         ok, reason, waited = await self.gateway.wait_human(
             self.task_id, req, lambda: self._human_check(exp), auto, settings.human_timeout_s,
@@ -765,10 +770,29 @@ class RouteRunner:
         if self.clock.timing().agent_ms > settings.task_budget_s * 1000:
             raise Stop(TaskStatus.failed, "task time budget exceeded")
 
+    def _step_view(self, step: Step) -> dict:
+        """What the UI shows for a step: action, field and (non-sensitive) value. Vault values never appear."""
+        t = step.target
+        label = step.label or (t and (t.role_name or t.text or t.label)) or step.intent or step.id
+        view = {"do": step.do, "label": label, "kind": step.kind}
+        if step.do == "goto" and step.url:
+            view["host"] = urlparse(step.url.replace("{{portal.base_url}}", self.portal.base_url)).hostname
+        m = PLACEHOLDER.fullmatch((step.value or "").strip())
+        if m and m.group(1) == "input":
+            view["value"] = str(self.task.inputs.get(m.group(2), ""))[:80]
+        elif m and m.group(1) == "vault":
+            view["value"] = "private value from your vault"
+        elif m and m.group(1) == "doc":
+            view["value"] = f"document: {m.group(2)}"
+        chosen = PLACEHOLDER.search((t.id or "") if t else "")
+        if step.do == "check" and chosen and chosen.group(1) == "input":
+            view["value"] = str(self.task.inputs.get(chosen.group(2), ""))[:80]
+        return view
+
     async def _run_step(self, step: Step, index: int) -> int:
         if step.when and not self.when_ok(step):
             return index + 1
-        self.emit("step", f"{step.id}: {step.do}" + (f" ({step.intent})" if step.intent else ""), step.id)
+        self.emit("step", f"{step.id}: {step.do}" + (f" ({step.intent})" if step.intent else ""), step.id, self._step_view(step))
         if step.do == "human_step":
             await self._human(step)
             return index + 1

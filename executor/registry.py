@@ -170,6 +170,10 @@ class Route(_Strict):
     read_only: bool = Field(False, description="Looks information up; never submits anything, so no approval gate")
     explore: ExploreSpec | None = None
     tracking: dict[str, str] = Field(default_factory=dict)
+    derive: dict[str, dict[str, dict[str, str]]] = Field(
+        default_factory=dict,
+        description="Routing filled from another input when the request does not say, e.g. category -> ministry and department",
+    )
     profile_match: list[str] = Field(
         default_factory=list, description="Input keys that should equal the citizen profile; differences are flagged on the approval card"
     )
@@ -216,6 +220,8 @@ class Portal(_Strict):
     terms_url: str | None = None
     block_resources: bool = Field(False, description="Skip fonts, media and trackers to load pages faster")
     public_demo: bool = Field(False, description="Offered in the public citizen console")
+    search_url: str | None = Field(None, description="The portal's own search page; the agent console types the query there")
+    about: str = Field("", description="One line for the agent console's planner: what this site is for")
     notes: str = ""
 
 

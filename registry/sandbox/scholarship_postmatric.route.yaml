@@ -80,9 +80,8 @@ steps:
     target: {id: state}
     value: "{{input.state}}"
     label: State of Domicile
-    wait_options: {id: district}
-  - id: select_district
-    do: select
+  - id: fill_district
+    do: fill
     target: {id: district}
     value: "{{input.district}}"
     label: District

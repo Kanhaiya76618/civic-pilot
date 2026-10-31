@@ -38,6 +38,28 @@ CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, task_id TEXT N
 CREATE TABLE IF NOT EXISTS vault (vault_ref TEXT PRIMARY KEY, ciphertext BLOB NOT NULL, expires_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS documents (doc_id TEXT PRIMARY KEY, path TEXT NOT NULL, media_type TEXT, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS runs (
+    run_id TEXT PRIMARY KEY,
+    token TEXT NOT NULL,
+    query TEXT NOT NULL,
+    title TEXT,
+    intent TEXT,
+    strategy TEXT,
+    status TEXT NOT NULL,
+    task_id TEXT,
+    result_json TEXT,
+    stats_json TEXT NOT NULL DEFAULT '{}',
+    extra_json TEXT NOT NULL DEFAULT '{}',
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS run_steps (
+    run_id TEXT NOT NULL,
+    step_no INTEGER NOT NULL,
+    step_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, step_no)
+);
 """
 
 
@@ -185,6 +207,57 @@ class Store:
 
     def get_document(self, doc_id: str) -> sqlite3.Row | None:
         return self._one("SELECT * FROM documents WHERE doc_id=?", (doc_id,))
+
+    # agent console runs -----------------------------------------------------
+    RUN_JSON = ("result", "stats", "extra")  # stored as <name>_json
+
+    def insert_run(self, run_id: str, token: str, query: str) -> None:
+        ts = now_iso()
+        self._exec(
+            "INSERT INTO runs (run_id, token, query, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (run_id, token, query, "planning", ts, ts),
+        )
+
+    def update_run(self, run_id: str, **fields: Any) -> None:
+        if not fields:
+            return
+        cols, args = [], []
+        for k, v in fields.items():
+            cols.append(f"{k}_json=?" if k in self.RUN_JSON else f"{k}=?")
+            args.append(json.dumps(v, default=str) if k in self.RUN_JSON else v)
+        self._exec(f"UPDATE runs SET {', '.join(cols)}, updated_at=? WHERE run_id=?", (*args, now_iso(), run_id))
+
+    def get_run(self, run_id: str) -> dict | None:
+        row = self._one("SELECT * FROM runs WHERE run_id=?", (run_id,))
+        if not row:
+            return None
+        out = dict(row)
+        for k in self.RUN_JSON:
+            raw = out.pop(f"{k}_json")
+            out[k] = json.loads(raw) if raw else None
+        out["stats"] = {"ai_calls": 0, "model_ms": 0, "wall_ms": 0, "steps": 0, "cache_hit": False, "search_provider": None, **(out["stats"] or {})}
+        return out
+
+    def recent_runs(self, limit: int = 50) -> list[dict]:
+        rows = self._all("SELECT run_id FROM runs ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [self.get_run(r["run_id"]) for r in rows]
+
+    def add_run_step(self, run_id: str, step: dict) -> int:
+        with self._lock:
+            n = self._conn.execute("SELECT COALESCE(MAX(step_no), 0) + 1 FROM run_steps WHERE run_id=?", (run_id,)).fetchone()[0]
+            step["step_no"] = n
+            self._conn.execute("INSERT INTO run_steps VALUES (?,?,?)", (run_id, n, json.dumps(step, default=str)))
+        self._exec("UPDATE runs SET updated_at=? WHERE run_id=?", (now_iso(), run_id))
+        return n
+
+    def run_steps(self, run_id: str, after: int = 0) -> list[dict]:
+        rows = self._all("SELECT step_json FROM run_steps WHERE run_id=? AND step_no>? ORDER BY step_no", (run_id, after))
+        return [json.loads(r["step_json"]) for r in rows]
+
+    def interrupt_runs(self) -> None:
+        """Console runs live in memory; after a restart, any that were mid-flight are marked stopped."""
+        self._exec("UPDATE runs SET status='stopped', error='server restarted during this run', updated_at=? "
+                   "WHERE status NOT IN ('completed','failed','stopped','out_of_scope','handed_off','needs_details')", (now_iso(),))
 
     # flags (kill switch) ---------------------------------------------------
     def set_flag(self, name: str, value: Any) -> None:

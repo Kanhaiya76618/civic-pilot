@@ -68,9 +68,15 @@ class Settings:
     llm_model: str = field(default_factory=lambda: os.environ.get("CIVIC_LLM_MODEL", "claude-opus-5-5"))
     llm_effort: str = field(default_factory=lambda: os.environ.get("CIVIC_LLM_EFFORT", "low"))
     drift_threshold: float = field(default_factory=lambda: float(os.environ.get("CIVIC_DRIFT_THRESHOLD", "0.3")))
+    part1_api_url: str = field(default_factory=lambda: os.environ.get("PART1_API_URL", ""))
+    part2_api_url: str = field(default_factory=lambda: os.environ.get("PART2_API_URL", ""))
     repair_engine: str = field(default_factory=lambda: os.environ.get("CIVIC_REPAIR_ENGINE", "builtin"))
     explore_engine: str = field(default_factory=lambda: os.environ.get("CIVIC_EXPLORE_ENGINE", "builtin"))
     public_starts_per_hour: int = field(default_factory=lambda: int(os.environ.get("CIVIC_PUBLIC_STARTS_PER_HOUR", "30")))
+    # Agent console: web search providers tried in order ("duckduckgo", "site" = the portal's own search page).
+    search_providers: list[str] = field(default_factory=lambda: [p.strip() for p in os.environ.get("CIVIC_SEARCH", "duckduckgo,site").split(",") if p.strip()])
+    console_max_steps: int = field(default_factory=lambda: int(os.environ.get("CIVIC_CONSOLE_MAX_STEPS", "14")))
+    console_max_seconds: int = field(default_factory=lambda: int(os.environ.get("CIVIC_CONSOLE_MAX_SECONDS", "240")))
 
     @property
     def db_path(self) -> Path:
@@ -89,11 +95,15 @@ class Settings:
         return self.data_dir / "traces"
 
     @property
+    def runs_dir(self) -> Path:
+        return self.data_dir / "runs"
+
+    @property
     def llm_log_path(self) -> Path:
         return self.data_dir / "llm_requests.jsonl"
 
     def ensure_dirs(self) -> None:
-        for d in (self.data_dir, self.evidence_dir, self.uploads_dir, self.traces_dir):
+        for d in (self.data_dir, self.evidence_dir, self.uploads_dir, self.traces_dir, self.runs_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 

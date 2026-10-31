@@ -52,11 +52,15 @@ class Executor:
         self._loop_task: asyncio.Task | None = None
         self._stopping = False
         self.last_patch: dict[str, str] = {}
+        from .console import ConsoleManager  # the console drives this executor's browser, gateway and policy
+
+        self.console = ConsoleManager(self)
 
     # lifecycle ---------------------------------------------------------------
     async def start(self) -> None:
         for tid in self.store.requeue_interrupted():
             log.warning("task %s was interrupted by a restart; marked needs_review", tid)
+        self.store.interrupt_runs()
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=settings.headless)
         self._loop_task = asyncio.create_task(self._loop())
@@ -65,6 +69,7 @@ class Executor:
         self._stopping = True
         if self._loop_task:
             self._loop_task.cancel()
+        await self.console.stop()
         for t in list(self._running):
             t.cancel()
         await asyncio.gather(*self._running, return_exceptions=True)
@@ -177,6 +182,9 @@ class Executor:
                 self._status(task_id, TaskStatus.failed, str(e), error=str(e))
                 return
 
+            if self.policy.busy(portal):
+                self.publish(TaskEvent(task_id=task_id, status=TaskStatus.preparing_docs, kind="info",
+                                       message=f"Waiting for a free session on {portal.name} (one live session at a time)"))
             sem = await self.policy.acquire(portal)
             context = await self._browser.new_context(
                 viewport={"width": 1280, "height": 900}, locale="en-IN", accept_downloads=False

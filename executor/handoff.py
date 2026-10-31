@@ -18,6 +18,17 @@ from playwright.async_api import Page
 
 log = logging.getLogger("civic.handoff")
 
+# If nothing is focused, put the cursor in the first empty text field, so a citizen
+# on a phone does not have to tap precisely before typing an OTP or CAPTCHA.
+FOCUS_FIRST_EMPTY_JS = """() => {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.matches('input, textarea, [contenteditable="true"]')) return true;
+  const el = [...document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=submit]):not([type=button]), textarea')]
+    .find(e => e.offsetParent !== null && !e.value && !e.disabled && !e.readOnly);
+  if (el) { el.scrollIntoView({block: 'center'}); el.focus(); return true; }
+  return false;
+}"""
+
 ALLOWED_KEYS = {"Backspace", "Enter", "Tab", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Escape"}
 
 
@@ -82,6 +93,7 @@ class LiveView:
             await self.page.mouse.click(x * vp["width"], y * vp["height"])
         elif t == "type":
             text = str(msg.get("text", ""))[:200]
+            await self.page.evaluate(FOCUS_FIRST_EMPTY_JS)
             await self.page.keyboard.type(text)
         elif t == "key" and msg.get("key") in ALLOWED_KEYS:
             await self.page.keyboard.press(msg["key"])

@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import Callable
 
 import httpx
-from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from . import enrich
@@ -29,6 +30,25 @@ from .models import ApplicationTask, CitizenProfile, ConsentRecord, DocumentRef
 from .registry import RegistryError
 
 STATIC = Path(__file__).parent / "static"
+WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+# Client-side routes of the React app (web/). Everything else under / is the API.
+SPA_ROUTES = ["/", "/schemes", "/schemes/engine", "/grievance", "/board", "/agent", "/agent/history", "/agent/runs/{run_id}"]
+
+
+def spa_index() -> str:
+    index = WEB_DIST / "index.html"
+    if index.exists():
+        return index.read_text()
+    return (STATIC / "console.html").read_text()  # fallback when the web app has not been built
+
+
+def mount_spa(app: FastAPI) -> None:
+    if (WEB_DIST / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
+    for name in ("logo.svg", "favicon.svg"):
+        if (WEB_DIST / name).exists():
+            app.add_api_route(f"/{name}", lambda name=name: Response((WEB_DIST / name).read_bytes(), media_type="image/svg+xml"),
+                              methods=["GET"], include_in_schema=False)
 
 
 def make_router(ex: Callable) -> APIRouter:
@@ -45,9 +65,38 @@ def make_router(ex: Callable) -> APIRouter:
             raise HTTPException(429, "Too many applications from this address in the last hour")
         q.append(now)
 
-    @r.get("/", response_class=HTMLResponse)
-    async def console():
-        return (STATIC / "console.html").read_text()
+    for path in SPA_ROUTES:
+        r.add_api_route(path, lambda: HTMLResponse(spa_index()), methods=["GET"], include_in_schema=False)
+
+    @r.get("/app/config")
+    async def config():
+        return {
+            "part1_connected": bool(settings.part1_api_url),
+            "part2_connected": bool(settings.part2_api_url),
+            "ai_available": bool(ex().llm),
+            "sandbox_url_internal": bool(settings.sandbox_url),
+        }
+
+    async def _proxy(base: str, path: str, request: Request) -> Response:
+        """Server-side pass-through to a teammate's API: one config value, no CORS setup on their side."""
+        if not base:
+            raise HTTPException(503, "this service is not connected yet")
+        url = f"{base.rstrip('/')}/{path}"
+        try:
+            async with httpx.AsyncClient(timeout=30) as c:
+                r = await c.request(request.method, url, params=dict(request.query_params), content=await request.body(),
+                                    headers={k: v for k, v in request.headers.items() if k.lower() in {"content-type", "accept"}})
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"could not reach the service: {type(e).__name__}")
+        return Response(r.content, status_code=r.status_code, media_type=r.headers.get("content-type"))
+
+    @r.api_route("/app/part1/{path:path}", methods=["GET", "POST"])
+    async def part1(path: str, request: Request):
+        return await _proxy(settings.part1_api_url, path, request)
+
+    @r.api_route("/app/part2/{path:path}", methods=["GET", "POST"])
+    async def part2(path: str, request: Request):
+        return await _proxy(settings.part2_api_url, path, request)
 
     @r.get("/app/services")
     async def services():
@@ -70,8 +119,21 @@ def make_router(ex: Callable) -> APIRouter:
             task = json.loads(row["task_json"])
             last = ex().store.last_event(row["task_id"]) or {}
             receipt = ex().store.get_receipt(row["receipt_id"]) if row["receipt_id"] else None
+            inputs = task.get("inputs", {})
+            coarse = None
+            if task["service_id"] == "public_grievance" and inputs.get("latitude") and inputs.get("longitude"):
+                try:  # ~1 km precision: enough for a public map, not enough to find a home
+                    coarse = [round(float(inputs["latitude"]), 2), round(float(inputs["longitude"]), 2)]
+                except ValueError:
+                    coarse = None
             out.append({
                 "service": f"{task['portal_id']}/{task['service_id']}",
+                "portal_id": task["portal_id"],
+                "service_id": task["service_id"],
+                "category": inputs.get("category") if task["service_id"] == "public_grievance" else None,
+                "district": inputs.get("district") if task["service_id"] == "public_grievance" else None,
+                "location": coarse,
+                "reference_no": receipt and receipt.get("reference_no"),
                 "strategy": task.get("strategy", "auto"),
                 "status": row["status"],
                 "outcome": receipt and receipt["outcome"],
