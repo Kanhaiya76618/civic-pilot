@@ -184,22 +184,16 @@ with tab_report:
     st.divider()
 
     # =========================================================================
-    # 2. INCIDENT LOCATION: PURE LIVE LOCATION + TOGGLEABLE MAP (NO PREFILLED DATA)
+    # 2. INCIDENT LOCATION: ALWAYS-VISIBLE LIVE INTERACTIVE MAP (NO TOGGLE NEEDED)
     # =========================================================================
-    st.markdown("### 2. Incident Location")
+    st.markdown("### 2. Incident Location (Live Auto-Detected GPS)")
+    st.info("📍 **Your real-time location is auto-detected below.** Drag the red pin with your mouse/touch, click anywhere on the street to adjust the exact defect spot, or click **🎯 My Current GPS** on the map.")
 
-    # Toggle to view/adjust map
-    show_map = st.toggle(
-        "🗺️ Toggle Map to Change Location (If incident is at a different spot)",
-        value=False,
-        help="Turn ON if you need to drag the pin to a different street than where you are standing."
-    )
-
-    # Always invoke component in DOM so client-side browser GPS auto-acquires seamlessly
+    # Always-visible interactive draggable map component
     loc_payload = draggable_map_component(
         lat=st.session_state.pinned_lat,
         lon=st.session_state.pinned_lon,
-        visible=show_map,
+        visible=True,
         is_live=st.session_state.is_live_gps,
         key="drag_and_drop_pin_widget"
     )
@@ -232,7 +226,7 @@ with tab_report:
         if changed:
             st.rerun()
 
-    # Display Current Live Location (NO prefilled dummy values)
+    # Display Current Live Location Status Card
     if st.session_state.pinned_lat is not None and st.session_state.pinned_lon is not None:
         cur_lat = round(st.session_state.pinned_lat, 5)
         cur_lon = round(st.session_state.pinned_lon, 5)
@@ -241,7 +235,7 @@ with tab_report:
         gps_status_badge = "🟢 Device GPS Verified (Real-Time)" if st.session_state.is_live_gps else "📍 Manually Adjusted Pin"
 
         st.markdown(f"""
-        <div style="background: #1e293b; border: 1px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+        <div style="background: #1e293b; border: 1px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-top: 10px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-size: 15px; font-weight: 700; color: #38bdf8;">📍 {'My Live Current Location' if st.session_state.is_live_gps else 'Incident Pinned Location'}</span>
                 <span style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">{gps_status_badge}</span>
@@ -249,7 +243,7 @@ with tab_report:
             <div style="font-size: 14px; line-height: 1.6; color: #f1f5f9;">
                 🏛️ <b>Jurisdiction / Area:</b> <b>{quick_ward['ward_name']}</b> &nbsp;|&nbsp; 🏙️ <b>Body:</b> {quick_ward['city']}<br>
                 👷 <b>Nodal Authority:</b> <code>{quick_ward['executive_engineer_in_charge']}</code><br>
-                🌐 <b>Live Coordinates:</b> <code>{cur_lat:.5f}° N, {cur_lon:.5f}° E</code>
+                🌐 <b>Active Coordinates:</b> <code>{cur_lat:.5f}° N, {cur_lon:.5f}° E</code>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -257,11 +251,6 @@ with tab_report:
         st.warning("📡 **Detecting your live device GPS location...** Please ensure location access is allowed in your browser prompt.")
         cur_lat = None
         cur_lon = None
-
-    if show_map:
-        st.info("📍 **Drag the red pin with your mouse/touch, click anywhere on the street to adjust, or click '🎯 My Current GPS' on the map to re-center.**")
-    else:
-        st.caption("ℹ️ The complaint is set to your live location above. Turn on the **Toggle Map** switch anytime if you want to inspect the map or adjust the pin.")
 
     st.divider()
 

@@ -247,18 +247,15 @@
     window.addEventListener("message", function (event) {
       if (event.data && event.data.type === "streamlit:render") {
         const args = event.data.args;
-        const isVisible = !(args && args.visible === false);
 
-        document.body.style.display = isVisible ? "block" : "none";
+        document.body.style.display = "block";
         window.parent.postMessage({
           isStreamlitMessage: true,
           type: "streamlit:setFrameHeight",
-          height: isVisible ? 390 : 0
+          height: 400
         }, "*");
 
-        if (isVisible) {
-          setTimeout(function() { map.invalidateSize(); }, 150);
-        }
+        setTimeout(function() { map.invalidateSize(); }, 150);
 
         if (args && args.lat && args.lon) {
           const newLat = parseFloat(args.lat);
