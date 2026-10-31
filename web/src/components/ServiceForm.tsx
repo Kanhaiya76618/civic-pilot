@@ -12,6 +12,9 @@ type Props = {
   extraFiles?: { key: string; file: File }[];
   submitLabel?: string;
   compact?: boolean;
+  compactCard?: boolean;
+  districts?: string[];
+  cardTitle?: string;
   /** Called with the new task before the page moves to its agent room. */
   onStarted?: (r: { task_id: string; citizen_path: string }) => Promise<unknown> | void;
 };
@@ -26,14 +29,18 @@ function inputType(i: InputDef) {
   return "text";
 }
 
-export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [], submitLabel = "Start", compact, onStarted }: Props) {
+export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [], submitLabel = "Start", compact, compactCard, districts, cardTitle, onStarted }: Props) {
   const nav = useNavigate();
   const toast = useToast();
   const [values, setValues] = useState<Record<string, string>>(prefill);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
   const [consent, setConsent] = useState(false);
-  const [mode, setMode] = useState(service.read_only ? "assist" : "dry_run");
+  const [mode, setMode] = useState(
+    compactCard && service.submission_enabled && service.status === "stable"
+      ? "assist"
+      : service.read_only ? "assist" : "dry_run"
+  );
   const [strategy, setStrategy] = useState(service.has_recorded_route ? "route" : "explore");
   const [busy, setBusy] = useState(false);
   const [pin, setPin] = useState(prefill.pincode ?? "");
@@ -42,7 +49,7 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
 
   useEffect(() => { setValues((v) => ({ ...prefill, ...v })); }, [JSON.stringify(prefill)]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = useMemo(() => service.inputs.filter((i) => !hide.includes(i.key) && i.key !== "pincode"), [service, hide]);
-  const pub = shown.filter((i) => i.source === "input");
+  const pub = shown.filter((i) => i.source === "input" && (!compactCard || i.required || i.key === "district"));
   const priv = shown.filter((i) => i.source === "vault");
   const keys = new Set(service.inputs.map((i) => i.key));
   const wantsPin = keys.has("state") && !hide.includes("state");
@@ -58,7 +65,8 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
       if (!r.ok) { setPinInfo({ ok: r.ok, text: r.ok === false ? r.error ?? "PIN code not found" : "Lookup unavailable right now; type your state." }); return; }
       const st = service.inputs.find((i) => i.key === "state");
       const state = st?.enum?.find((e) => e.toLowerCase().replace("&", "and") === String(r.data.state).toLowerCase().replace("&", "and")) ?? r.data.state;
-      setValues((v) => ({ ...v, state, ...(keys.has("district") ? { district: r.data.districts[0] } : {}), ...(keys.has("pincode") ? { pincode: pin } : {}) }));
+      const autodis: Record<string, string> = (keys.has("district") && r.data.districts.length === 1 && !values.district) ? { district: r.data.districts[0] } : {};
+      setValues((v) => ({ ...v, state, ...autodis, ...(keys.has("pincode") ? { pincode: pin } : {}) }));
       setPinInfo({ ok: true, text: `${r.data.districts.join(", ")}, ${r.data.state}`, districts: r.data.districts });
     }).catch(() => live && setPinInfo({ ok: null, text: "Lookup unavailable right now; type your state." }));
     return () => { live = false; };
@@ -127,8 +135,14 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
     );
     const v = values[i.key] ?? "";
     let control;
-    if (i.key === "district" && pinInfo?.districts && pinInfo.districts.length > 1) {
-      control = <select id={id} className={field} value={v} onChange={(e) => set(i.key, e.target.value)}>{pinInfo.districts.map((d) => <option key={d}>{d}</option>)}</select>;
+    const availDistricts = pinInfo?.districts || districts;
+    if (i.key === "district" && availDistricts && availDistricts.length > 1) {
+      control = (
+        <select id={id} className={field} value={v} onChange={(e) => set(i.key, e.target.value)} aria-invalid={!!errors[i.key]}>
+          <option value="">Select district…</option>
+          {availDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      );
     } else if (i.enum) {
       control = (
         <select id={id} className={field} value={v} onChange={(e) => set(i.key, e.target.value)} aria-invalid={!!errors[i.key]}>
@@ -155,6 +169,39 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
       </div>
     );
   };
+
+  if (compactCard) {
+    return (
+      <form onSubmit={submit} noValidate className="space-y-5 rounded-2xl bg-white p-5 ring-1 ring-navy-100 shadow-sm sm:p-6">
+        <div>
+          <h3 className="text-lg font-extrabold text-navy-900">{cardTitle || "I need only this from you"}</h3>
+          <p className="mt-1 text-sm text-slate-600">The rest was filled from your request. Private fields are encrypted in the vault.</p>
+        </div>
+
+        {pub.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {pub.map(renderInput)}
+          </div>
+        )}
+
+        {priv.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {priv.map(renderInput)}
+          </div>
+        )}
+
+        <div>
+          <label className="flex items-start gap-3 rounded-2xl bg-leaf-50/70 p-4 text-sm text-slate-700 ring-1 ring-leaf-200">
+            <input id="f_consent" type="checkbox" className="mt-0.5 size-5 accent-[#138808]" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErrors((x) => ({ ...x, consent: "" })); }} />
+            <span><ShieldCheck className="mr-1 inline size-4 text-leaf-700" />I agree that Civic Pulse may fill <b>{service.description}</b> on <b>{service.portal_name}</b> for me during the next 24 hours. Nothing is submitted without my approval.</span>
+          </label>
+          <Err k="consent" />
+        </div>
+
+        <Button type="submit" variant="saffron" loading={busy} className="w-full text-base sm:w-auto">{submitLabel || "Start filing"}</Button>
+      </form>
+    );
+  }
 
   return (
     <form onSubmit={submit} noValidate className="space-y-6">

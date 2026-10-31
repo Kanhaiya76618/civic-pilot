@@ -17,16 +17,6 @@ const CATEGORIES: { id: Category; label: string; hi: string; tint: string }[] = 
   { id: "Other", label: "Something else", hi: "अन्य", tint: "from-navy-50" },
 ];
 
-/** Where the portal routes each category (see docs/INTEGRATION.md). */
-const ROUTING: Record<Category, [string, string]> = {
-  "Road and Bridges": ["Ministry of Road Transport and Highways", "Road Safety"],
-  "Water Supply": ["Ministry of Housing and Urban Affairs", "Municipal Services"],
-  "Sanitation and Garbage": ["Ministry of Housing and Urban Affairs", "Swachh Bharat Mission (Urban)"],
-  "Street Lights": ["Ministry of Housing and Urban Affairs", "Municipal Services"],
-  Pollution: ["Ministry of Environment, Forest and Climate Change", "Pollution Control"],
-  Other: ["Ministry of Housing and Urban Affairs", "Municipal Services"],
-};
-
 /** Part 2 contract: POST /api/reports (multipart) -> Triage (see docs/UI_CONTRACT.md). */
 type Triage = { code?: string; severity: "P1" | "P2" | "P3" | string; category?: string; reasoning?: string; duplicate_of?: string | null };
 
@@ -139,6 +129,7 @@ export default function Grievance() {
   const canNext = [true, !!place, subject.trim().length >= 5 && description.trim().length >= 10, true][step];
   const photoUrl = photo ? URL.createObjectURL(photo) : null;
   const sev = triage?.severity === "P1" ? { label: "Critical", tone: "red" as const } : triage?.severity === "P2" ? { label: "High", tone: "saffron" as const } : { label: "Medium", tone: "leaf" as const };
+  const routing = (category && service?.derive?.category?.[category]) || { ministry: "", department: "" };
 
   return (
     <div>
@@ -243,7 +234,7 @@ export default function Grievance() {
                       </div>
                       <div className="flex items-start gap-3 rounded-2xl bg-saffron-50 p-4 ring-1 ring-saffron-200">
                         <Route className="mt-0.5 size-5 shrink-0 text-saffron-700" />
-                        <p className="text-sm text-navy-900">Will be sent to <b>{ROUTING[category][0]}</b> · {ROUTING[category][1]}</p>
+                        <p className="text-sm text-navy-900">Will be sent to <b>{routing.ministry}</b> · {routing.department}</p>
                       </div>
                     </div>
                   )}
@@ -273,7 +264,7 @@ export default function Grievance() {
                       <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">Filed on the <b>sandbox replica</b> of a CPGRAMS-style portal: real filings to ministries are never used for testing.</div>
                       <ServiceForm
                         service={service}
-                        prefill={{ ministry: ROUTING[category][0], department: ROUTING[category][1], category, state: place?.state ?? "", district: place?.district ?? "", pincode: pin, subject, description, ...(coords ? { latitude: coords[0].toFixed(6), longitude: coords[1].toFixed(6) } : {}) }}
+                        prefill={{ ministry: routing.ministry, department: routing.department, category, state: place?.state ?? "", district: place?.district ?? "", pincode: pin, subject, description, ...(coords ? { latitude: coords[0].toFixed(6), longitude: coords[1].toFixed(6) } : {}) }}
                         hide={["ministry", "department", "category", "state", "district", "subject", "description", "latitude", "longitude", "pincode"]}
                         extraFiles={photo ? [{ key: "attachment", file: photo }] : []}
                         submitLabel="File it with the agent"

@@ -166,7 +166,13 @@ function BrowserCard({ s, taskId, token, caption }: { s: TaskState; taskId: stri
                 <Button variant="saffron" onClick={() => api.humanDone(taskId, token).catch((e) => toast("error", e.message))}>Done</Button>
                 <Button variant="ghost" className="!text-rose-300 hover:!bg-rose-400/10" onClick={() => api.humanCancel(taskId, token).catch((e) => toast("error", e.message))}>Cancel</Button>
                 {s.portal.is_sandbox && human.kind === "otp" && (
-                  <Button variant="ghost" className="!text-amber-200 hover:!bg-white/5" onClick={async () => { const r = await api.sandboxSms(); setSms(r.messages.at(-1)?.text ?? "No SMS yet"); }}>
+                  <Button variant="ghost" className="!text-amber-200 hover:!bg-white/5" onClick={async () => {
+                    const r = await api.sandboxSms();
+                    const text = r.messages.at(-1)?.text ?? "No SMS yet";
+                    setSms(text);
+                    const m = text.match(/\b\d{6}\b/);
+                    if (m) setTyped(m[0]);
+                  }}>
                     <Smartphone className="size-4" /> Open sandbox phone
                   </Button>
                 )}

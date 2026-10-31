@@ -10,6 +10,7 @@ export type Service = {
   portal_id: string; portal_name: string; service_id: string; description: string; status: string;
   is_sandbox: boolean; submission_enabled: boolean; public_demo: boolean; read_only: boolean;
   explorable: boolean; has_recorded_route: boolean; inputs: InputDef[]; documents: DocDef[];
+  derive?: Record<string, Record<string, Record<string, string>>>;
 };
 export type Timing = {
   agent_ms?: number; browser_ms?: number; model_ms?: number; human_wait_ms?: number; total_ms?: number;
@@ -64,7 +65,7 @@ export type AgentRun = {
   run_id: string; query: string; title: string | null; intent: string | null; strategy: string | null; status: string;
   task_id: string | null; task_status?: string | null; result: RunResult | null; stats: RunStats; error: string | null;
   extra: { offer?: { portal_id: string; service_id: string; prefill: Record<string, string>; missing: string[] };
-           handoff?: { portal_id: string; service_id: string; prefill: Record<string, string> }; private?: boolean } | null;
+           handoff?: { portal_id: string; service_id: string; prefill: Record<string, string>; districts?: string[] }; private?: boolean } | null;
   created_at: string; updated_at: string;
 };
 export const RUN_TERMINAL = new Set(["completed", "failed", "stopped", "out_of_scope", "handed_off", "needs_details", "needs_review"]);

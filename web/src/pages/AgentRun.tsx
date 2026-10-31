@@ -273,6 +273,7 @@ export default function AgentRunPage() {
   const [replay, setReplay] = useState<{ i: number; speed: number } | null>(null);
   const [speed, setSpeed] = useState(2);
   const [service, setService] = useState<Service | null>(null);
+  const [pinDistricts, setPinDistricts] = useState<string[]>([]);
   const listRef = useRef<HTMLOListElement>(null);
 
   useEffect(() => { const t = params.get("t"); if (t) runTokens.set(runId, t); }, [runId, params]);
@@ -301,6 +302,14 @@ export default function AgentRunPage() {
     if (!handoff) return;
     api.services().then((all) => setService(all.find((s) => s.portal_id === handoff.portal_id && s.service_id === handoff.service_id) ?? null)).catch(() => {});
   }, [handoff?.portal_id, handoff?.service_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const pin = handoff?.prefill?.pincode;
+    if (!pin || handoff?.districts?.length) return;
+    api.pincode(pin).then((r) => {
+      if (r.ok && r.data?.districts) setPinDistricts(r.data.districts);
+    }).catch(() => {});
+  }, [handoff?.prefill?.pincode, handoff?.districts]);
 
   // Replay: reveal recorded steps with their real gaps, sped up.
   useEffect(() => {
@@ -422,24 +431,40 @@ export default function AgentRunPage() {
         </div>
       </div>
 
-      {handoff && run.status === "needs_details" && (
-        <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-6 rounded-3xl bg-white p-5 text-slate-900 shadow-2xl shadow-black/30 sm:p-7">
-          <h2 className="text-xl font-extrabold text-navy-900">{service?.description ?? "Your details"}</h2>
-          <p className="text-sm text-slate-600">The agent filled these from your request. You add only what it cannot know; private fields are encrypted and never shown to the AI. Nothing is submitted until you approve the final page.</p>
-          <ul className="my-5 grid gap-2 sm:grid-cols-2">
-            {Object.entries(handoff.prefill).filter(([k]) => !["latitude", "longitude"].includes(k)).map(([k, v]) => (
-              <li key={k} className="flex items-start gap-2 rounded-xl bg-leaf-50 px-3 py-2 text-sm ring-1 ring-leaf-100">
-                <BadgeCheck className="mt-0.5 size-4 shrink-0 text-leaf-600" />
-                <span className="min-w-0"><span className="block text-xs font-semibold text-slate-500">{service?.inputs.find((i) => i.key === k)?.label ?? k}</span><span className="break-words text-slate-900">{v}</span></span>
-              </li>
-            ))}
-          </ul>
-          {service ? (
-            <ServiceForm service={service} prefill={handoff.prefill} hide={Object.keys(handoff.prefill)} submitLabel="Start the filing agent"
-              onStarted={(r) => (token ? agent.link(runId, token, r.task_id) : undefined)} />
-          ) : <p className="flex items-center gap-2 text-slate-500"><LoaderCircle className="size-4 animate-spin" />Loading the form…</p>}
-        </motion.section>
-      )}
+      {handoff && run.status === "needs_details" && (() => {
+        const missingPub = service?.inputs.filter((i) => i.source === "input" && i.required && !handoff.prefill[i.key]) ?? [];
+        const isOnlyPrivate = missingPub.length === 0;
+        const isOnlyDistrictAndPrivate = missingPub.length === 1 && missingPub[0].key === "district";
+        const isCompact = isOnlyPrivate || isOnlyDistrictAndPrivate;
+        const availDistricts = handoff.districts || (pinDistricts.length > 1 ? pinDistricts : undefined);
+
+        return (
+          <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-6 rounded-3xl bg-white p-5 text-slate-900 shadow-2xl shadow-black/30 sm:p-7">
+            <h2 className="text-xl font-extrabold text-navy-900">{service?.description ?? "Your details"}</h2>
+            <p className="text-sm text-slate-600">The agent filled these from your request. You add only what it cannot know; private fields are encrypted and never shown to the AI. Nothing is submitted until you approve the final page.</p>
+            <ul className="my-5 grid gap-2 sm:grid-cols-2">
+              {Object.entries(handoff.prefill).filter(([k]) => !["latitude", "longitude"].includes(k)).map(([k, v]) => (
+                <li key={k} className="flex items-start gap-2 rounded-xl bg-leaf-50 px-3 py-2 text-sm ring-1 ring-leaf-100">
+                  <BadgeCheck className="mt-0.5 size-4 shrink-0 text-leaf-600" />
+                  <span className="min-w-0"><span className="block text-xs font-semibold text-slate-500">{service?.inputs.find((i) => i.key === k)?.label ?? k}</span><span className="break-words text-slate-900">{v}</span></span>
+                </li>
+              ))}
+            </ul>
+            {service ? (
+              <ServiceForm
+                service={service}
+                prefill={handoff.prefill}
+                hide={Object.keys(handoff.prefill)}
+                districts={availDistricts}
+                compactCard={isCompact}
+                cardTitle="I need only this from you"
+                submitLabel={isCompact ? "Start filing" : "Start the filing agent"}
+                onStarted={(r) => (token ? agent.link(runId, token, r.task_id) : undefined)}
+              />
+            ) : <p className="flex items-center gap-2 text-slate-500"><LoaderCircle className="size-4 animate-spin" />Loading the form…</p>}
+          </motion.section>
+        );
+      })()}
       {run.status === "handed_off" && (
         <p className="mt-6 flex items-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300 ring-1 ring-white/10"><FileText className="size-4" />Handed to the filing agent. Filing status: <StatusBadge status={run.task_status ?? "queued"} /></p>
       )}

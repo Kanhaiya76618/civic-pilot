@@ -288,6 +288,7 @@ class Registry:
                         "has_recorded_route": bool(route.steps),
                         "inputs": [i.model_dump() for i in route.inputs],
                         "documents": [d.model_dump() for d in route.documents],
+                        "derive": route.derive,
                     }
                 )
         return out

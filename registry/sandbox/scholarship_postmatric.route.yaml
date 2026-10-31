@@ -18,6 +18,7 @@ inputs:
   - {key: course_level, label: Course level, enum: [Class 11, Class 12, Diploma, Undergraduate, Postgraduate]}
   - {key: institution, label: Institution, free_text: true, max_len: 120}
   - {key: annual_income, label: Annual family income (₹), pattern: "\\d{1,9}"}
+  - {key: pincode, label: PIN code, required: false, pattern: "[1-9]\\d{5}", verify: pincode}
   - {key: ifsc, label: IFSC, pattern: "[A-Z]{4}0[A-Z0-9]{6}", verify: ifsc}
   - {key: mobile, source: vault, label: Mobile number}
   - {key: email, source: vault, label: Email}

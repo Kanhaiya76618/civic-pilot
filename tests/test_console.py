@@ -213,3 +213,83 @@ async def test_without_a_model_the_console_says_so(executor):
     run_id, _ = executor.console.start("Find scholarships in Bihar")
     run = await wait_run(executor, run_id, {"failed"})
     assert "needs an AI model" in run["error"]
+
+
+async def test_execution_multi_district_pin_offers_candidates(executor):
+    known = [("category", "Sanitation and Garbage"), ("pincode", "110001"), ("description", "Garbage not collected")]
+    executor.llm = FakeLLM(lambda s, u, n: plan(intent="execution", service="sandbox/public_grievance", known=known))
+    run_id, _ = executor.console.start("Garbage not collected complaint near PIN 110001")
+    run = await wait_run(executor, run_id, {"needs_details"})
+    handoff = run["extra"]["handoff"]
+    assert handoff["service_id"] == "public_grievance"
+    assert handoff["prefill"].get("pincode") == "110001"
+    assert handoff["prefill"].get("state") == "Delhi"
+    # When multiple districts exist, district is NOT auto-filled in prefill, but candidate districts are passed in handoff extra
+    assert "district" not in handoff["prefill"]
+    assert handoff.get("districts") == ["Central Delhi", "New Delhi"]
+    step = executor.store.run_steps(run_id)[-1]
+    assert "District" in step["missing"] and "Mobile number" in step["missing"]
+
+
+async def test_scholarship_execution_prefill_and_enrich(executor):
+    known = [
+        ("course", "B.Sc"),
+        ("institution", "Patna College"),
+        ("category", "SC"),
+        ("family_income", "1.8 lakh"),
+        ("gender", "Female"),
+    ]
+    executor.llm = FakeLLM(lambda s, u, n: plan(intent="execution", service="sandbox/scholarship_postmatric", known=known))
+    run_id, _ = executor.console.start("Apply for post-matric scholarship for my daughter, SC category, studying B.Sc at Patna College, family income 1.8 lakh")
+    run = await wait_run(executor, run_id, {"needs_details"})
+    handoff = run["extra"]["handoff"]
+    assert handoff["service_id"] == "scholarship_postmatric"
+    p = handoff["prefill"]
+    assert p["course_level"] == "Undergraduate"
+    assert p["institution"] == "Patna College"
+    assert p["category"] == "SC"
+    assert p["annual_income"] == "180000"
+    assert p["gender"] == "Female"
+    assert p["state"] == "Bihar"
+    assert p["district"] == "Patna"
+
+
+async def test_canonical_input_matching():
+    from executor.console import canonical_input
+    from executor.registry import Registry
+
+    reg = Registry()
+    grievance = reg.route("sandbox", "public_grievance")
+    cat_spec = next(i for i in grievance.inputs if i.key == "category")
+    assert canonical_input(cat_spec, "street light") == "Street Lights"
+    assert canonical_input(cat_spec, "streetlight") == "Street Lights"
+    assert canonical_input(cat_spec, "Street Light") == "Street Lights"
+    assert canonical_input(cat_spec, "garbage") == "Sanitation and Garbage"
+    assert canonical_input(cat_spec, "garbage collection") == "Sanitation and Garbage"
+    assert canonical_input(cat_spec, "pothole") == "Road and Bridges"
+
+    scholarship = reg.route("sandbox", "scholarship_postmatric")
+    sch_cat = next(i for i in scholarship.inputs if i.key == "category")
+    # SC / ST matching
+    assert canonical_input(sch_cat, "SC") == "SC"
+    assert canonical_input(sch_cat, "ST") == "ST"
+    # Bare substring "caste" must not match "ST" or anything else
+    assert canonical_input(sch_cat, "caste") is None
+
+    # Course level aliases
+    course_spec = next(i for i in scholarship.inputs if i.key == "course_level")
+    assert canonical_input(course_spec, "B.Sc") == "Undergraduate"
+    assert canonical_input(course_spec, "B.Tech") == "Undergraduate"
+    assert canonical_input(course_spec, "M.Sc") == "Postgraduate"
+
+    # Annual income verbal parsing
+    income_spec = next(i for i in scholarship.inputs if i.key == "annual_income")
+    assert canonical_input(income_spec, "1.8 lakh") == "180000"
+    assert canonical_input(income_spec, "2.5 lakhs") == "250000"
+    assert canonical_input(income_spec, "200000") == "200000"
+
+    # Gender relation
+    gender_spec = next(i for i in scholarship.inputs if i.key == "gender")
+    assert canonical_input(gender_spec, "daughter") == "Female"
+    assert canonical_input(gender_spec, "son") == "Male"
+

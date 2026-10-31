@@ -51,6 +51,11 @@ def _fake_public_apis(request: httpx.Request) -> httpx.Response:
     if "postalpincode" in request.url.host:
         if code == "999999":
             return httpx.Response(200, json=[{"Status": "Error", "PostOffice": None}])
+        if code == "110001":
+            return httpx.Response(200, json=[{"Status": "Success", "PostOffice": [
+                {"Name": "Connaught Place", "District": "Central Delhi", "State": "Delhi"},
+                {"Name": "New Delhi GPO", "District": "New Delhi", "State": "Delhi"},
+            ]}])
         return httpx.Response(200, json=[{"Status": "Success", "PostOffice": [{"Name": "Test PO", "District": "Gaya", "State": "Bihar"}]}])
     if code == "ABCD0000000":
         return httpx.Response(404, json="Not Found")
