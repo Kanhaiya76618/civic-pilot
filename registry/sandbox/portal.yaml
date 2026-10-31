@@ -1,0 +1,18 @@
+portal_id: sandbox
+name: Civic Services Sandbox (replica)
+base_url: ${SANDBOX_URL}
+allowed_domains: [127.0.0.1, localhost]
+is_sandbox: true
+submission_enabled: true
+error_selector: ".alert-error, [role=alert]"
+login_detect:
+  url_contains: /login
+  no_error: false
+human_steps: [otp, captcha]
+rate_limit: {max_concurrent: 1, min_gap_s: 0, jitter_s: 0}
+public_demo: true
+notes: >
+  Our own sandbox replica with a visible "not a government website" banner. Used for filings,
+  which must never be tested on real government portals.
+  Reproduces OTP login, a 4-page wizard, cascading dropdowns, strict upload
+  limits, CAPTCHA and session timeout.

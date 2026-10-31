@@ -1,0 +1,112 @@
+portal_id: sandbox
+service_id: public_grievance
+version: 1
+status: stable
+description: Lodge a public grievance (sandbox replica, CPGRAMS-style flow)
+tracking:
+  status_url: ${SANDBOX_URL}/
+  hint: Track with the Registration Number.
+
+inputs:
+  - {key: ministry, label: Ministry, max_len: 120}
+  - {key: department, label: Sub-department, max_len: 120}
+  - {key: category, label: Grievance category, enum: [Road and Bridges, Water Supply, Sanitation and Garbage, Street Lights, Pollution, Other]}
+  - {key: state, label: State, max_len: 60}
+  - {key: district, label: District, max_len: 60}
+  - {key: subject, label: Subject, free_text: true, max_len: 150}
+  - {key: description, label: Description, free_text: true, max_len: 4000}
+  - {key: pincode, label: PIN code of the problem location, required: false, pattern: "[1-9]\\d{5}", verify: pincode}
+  - {key: mobile, source: vault, label: Mobile number}
+
+documents:
+  - {key: attachment, label: Supporting photo or document, required: false, max_kb: 1024, formats: [pdf, jpg], max_px: 2000}
+
+steps:
+  - id: open_login
+    do: goto
+    url: "{{portal.base_url}}/login?next=/grievance/lodge"
+    expect: {visible_text: Registered Mobile Number}
+  - id: fill_mobile
+    do: fill
+    target: {id: mobileNo}
+    value: "{{vault.mobile}}"
+    intent: Registered mobile number on the login page
+  - id: send_otp
+    do: click
+    target: {id: sendOtp, alt: [{role: button, role_name: Send OTP}]}
+    expect: {url_contains: /login/otp}
+  - id: otp
+    do: human_step
+    kind: otp
+    completion: auto
+    expect: {url_contains: /grievance/lodge, no_error: false}
+
+  - id: form
+    do: wait_for
+    expect: {heading: Lodge Public Grievance}
+    fingerprint: [ministry, department, grvCategory, grvState, grvDistrict, subject, grievanceDesc, attachment]
+  - id: select_ministry
+    do: select
+    target: {id: ministry}
+    value: "{{input.ministry}}"
+    label: Ministry / Department
+    wait_options: {id: department}
+  - id: select_department
+    do: select
+    target: {id: department}
+    value: "{{input.department}}"
+    label: Sub-department
+  - id: select_category
+    do: select
+    target: {id: grvCategory}
+    value: "{{input.category}}"
+    label: Grievance Category
+  - id: select_state
+    do: select
+    target: {id: grvState}
+    value: "{{input.state}}"
+    label: State
+    wait_options: {id: grvDistrict}
+  - id: select_district
+    do: select
+    target: {id: grvDistrict}
+    value: "{{input.district}}"
+    label: District
+  - id: fill_subject
+    do: fill
+    target: {id: subject}
+    value: "{{input.subject}}"
+    label: Subject
+  - id: fill_description
+    do: fill
+    target: {id: grievanceDesc}
+    value: "{{input.description}}"
+    label: Grievance Description
+    intent: Full description of the grievance
+  - id: upload_attachment
+    do: upload
+    target: {id: attachment}
+    value: "{{doc.attachment}}"
+    label: Supporting Document
+    optional: true
+  - id: next
+    do: click
+    target: {id: grvNext, alt: [{role: button, role_name: Next}]}
+    expect: {heading: Review your grievance}
+
+  - id: captcha
+    do: human_step
+    kind: captcha
+    completion: human_done
+    expect: {field_filled: {id: captchaInput}, no_error: false}
+  - id: final_review
+    do: approval_gate
+  - id: submit
+    do: click
+    target: {id: grvSubmit, alt: [{role: button, role_name: Submit Grievance}]}
+    submit: true
+    retry: never
+    expect: {visible_text: has been registered}
+    capture: {reference_no: "Registration Number:\\s+(SBX/[A-Z]+/E/\\d{4}/\\d+)"}
+    recover:
+      - {error_contains: Invalid CAPTCHA, goto: captcha, max_times: 2}

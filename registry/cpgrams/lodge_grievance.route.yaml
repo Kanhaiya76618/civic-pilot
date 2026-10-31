@@ -1,0 +1,46 @@
+# DRAFT: every '<confirm in recon>' must be replaced from a real recon session
+# (playwright codegen while logged in with your own account). The policy gate
+# refuses to run a route that still has these markers or status: draft.
+portal_id: cpgrams
+service_id: lodge_grievance
+version: 1
+status: draft
+description: Lodge a grievance on CPGRAMS
+tracking:
+  status_url: https://pgportal.gov.in/
+  hint: Track with the registration number on the CPGRAMS status page.
+
+inputs:
+  - {key: grievance_text, label: Grievance description, free_text: true, max_len: 4000}
+  - {key: category, label: Category, max_len: 120}
+  - {key: mobile, source: vault, label: Mobile number}
+
+steps:
+  - id: open_home
+    do: goto
+    url: https://pgportal.gov.in/
+    expect: {visible_text: "<confirm in recon>"}
+  - id: login
+    do: human_step
+    kind: login
+    completion: human_done
+    expect: {visible_text: "<confirm in recon>"}
+  - id: fill_description
+    do: fill
+    target: {label: "<confirm in recon>"}
+    value: "{{input.grievance_text}}"
+    intent: Grievance description text area
+  - id: captcha
+    do: human_step
+    kind: captcha
+    completion: human_done
+    expect: {field_filled: {label: "<confirm in recon>"}, no_error: false}
+  - id: final_review
+    do: approval_gate
+  - id: submit
+    do: click
+    target: {role: button, role_name: "<confirm in recon>"}
+    submit: true
+    retry: never
+    expect: {visible_text: "<confirm in recon>"}
+    capture: {reference_no: "<regex confirmed in recon>"}

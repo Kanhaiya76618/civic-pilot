@@ -1,0 +1,15 @@
+portal_id: rti_online
+name: RTI Online (rtionline.gov.in, central public authorities only)
+base_url: https://rtionline.gov.in
+allowed_domains: [rtionline.gov.in]
+is_sandbox: false
+# Every submission is a real legal request with a ₹10 fee (BPL exempt) paid through
+# the SBI gateway. Never run test filings here. Keep this off unless a citizen is
+# filing a genuine request and pays themselves in the live view.
+submission_enabled: false
+human_steps: [otp, captcha, payment]
+rate_limit: {max_concurrent: 1, min_gap_s: 60, jitter_s: 30}
+notes: >
+  The registration number appears after payment; an older guide says it can take
+  24-48 working hours because it is generated after reconciliation. No route yet:
+  for the demo, show the RTI flow as a dry run in the sandbox, or skip it.

@@ -1,0 +1,136 @@
+portal_id: myscheme
+service_id: find_schemes
+version: 1
+status: stable
+read_only: true
+description: Find government schemes the citizen may be eligible for (live myScheme.gov.in results)
+last_verified_at: 2026-10-31T00:00:00Z
+tracking:
+  status_url: https://www.myscheme.gov.in/search/user-journey
+  hint: Open any scheme link to read its eligibility and how to apply.
+
+inputs:
+  - {key: gender, label: Gender, enum: [Male, Female, Transgender]}
+  - {key: age, label: Age, pattern: "\\d{1,3}"}
+  - {key: marital_status, label: Marital status, required: false, max_len: 30, pattern: "[A-Za-z ]+"}
+  - {key: state, label: State, max_len: 60}
+  - {key: residence, label: Area of residence, enum: [Urban, Rural]}
+  - key: caste
+    label: Social category
+    enum: [General, Other Backward Class (OBC), Particularly Vulnerable Tribal Group (PVTG), Scheduled Caste (SC), Scheduled Tribe (ST), "De-Notified, Nomadic, and Semi-Nomadic (DNT) communities"]
+  - {key: disability, label: Person with disability, enum: ["Yes", "No"]}
+  - {key: disability_percentage, label: Disability percentage, required: false, pattern: "\\d{1,3}"}
+  - {key: minority, label: Belongs to a minority, required: false, enum: ["Yes", "No"]}
+  - {key: is_student, label: Currently a student, enum: ["Yes", "No"]}
+  - {key: employment_status, label: Employment status, required: false, enum: [Employed, Unemployed, Self-Employed/ Entrepreneur]}
+  - {key: government_employee, label: Government employee, required: false, enum: ["Yes", "No"]}
+  - key: occupation
+    label: Occupation (if one of the portal's listed groups, else "No")
+    required: false
+    enum: ["No", Ex Servicemen, Safai Karamchari, Health Worker, Street Vendor, Unorganized Worker, Artist, Sportsperson, Journalist,
+           Tea and Ex- Tea Garden tribes, Coir Worker, Khadi Artisan, Farmer, Fishermen, "Artisans, Spinners & Weavers",
+           Teacher / Faculty, Construction Worker, Organized Worker]
+  - {key: bpl, label: Below poverty line (BPL), enum: ["Yes", "No"]}
+  - {key: economic_distress, label: In economic distress, required: false, enum: ["Yes", "No"]}
+
+# Used when the task asks for strategy "explore", or if the recorded steps are deleted:
+# the model answers the questionnaire live and the run is saved as a draft route.
+explore:
+  start_url: https://www.myscheme.gov.in/find-scheme
+  goal: >
+    Answer the scheme-finder questions with the citizen's details, one screen at a time
+    (press Next after each screen and Submit on the last one), until the list of matching
+    schemes is shown.
+  finish_when: {url_contains: /search/user-journey}
+  extract: {count_regex: "We found (\\d+) schemes", items_css: "main h2 > a[href^='/schemes/']", empty_regex: No Schemes Found, limit: 10}
+  max_actions: 40
+
+steps:
+  - id: open
+    do: goto
+    url: https://www.myscheme.gov.in/find-scheme
+    expect: {visible_text: Tell us about yourself}
+
+  # screen 1
+  - {id: gender, do: check, target: {id: "answer{{input.gender}}"}, label: Gender}
+  - id: age
+    do: select
+    target: {after_text: and your age is, alt: [{css: main select, nth: 0}]}
+    value: "{{input.age}}"
+    label: Age
+  - id: marital_status
+    do: select
+    target: {css: main select, nth: 1}
+    value: "{{input.marital_status}}"
+    label: Marital status
+    optional: true
+    timeout_ms: 1500  # appears straight after age, or not at all
+  - {id: next_1, do: click, target: {role: button, role_name: Next}, expect: {url_contains: /find-scheme/screen-2}}
+
+  # screen 2
+  - id: state
+    do: select
+    target: {after_text: Please select your state, alt: [{css: main select, nth: 0}]}
+    value: "{{input.state}}"
+    label: State
+  - {id: residence, do: check, target: {id: "answer{{input.residence}}_residence"}, label: Area of residence}
+  - {id: next_2, do: click, target: {role: button, role_name: Next}, expect: {url_contains: /find-scheme/screen-3}}
+
+  # screen 3
+  - {id: caste, do: check, target: {id: "answer{{input.caste}}_caste"}, label: Social category}
+  - {id: next_3, do: click, target: {role: button, role_name: Next}, expect: {url_contains: /find-scheme/screen-4}}
+
+  # screen 4
+  - {id: disability, do: check, target: {id: "answer{{input.disability}}_disability"}, label: Disability}
+  - id: disability_percentage
+    do: select
+    target: {css: main select, nth: 0}
+    value: "{{input.disability_percentage}}"
+    label: Disability percentage
+    when: {disability: ["Yes"]}
+    optional: true
+  - {id: minority, do: check, target: {id: "answer{{input.minority}}_minority"}, label: Minority, optional: true}
+  - {id: next_4, do: click, target: {role: button, role_name: Next}, expect: {url_contains: /find-scheme/screen-5}}
+
+  # screen 5
+  - {id: is_student, do: check, target: {id: "answer{{input.is_student}}_isStudent"}, label: Student}
+  - id: employment_status
+    do: check
+    target: {id: "answer{{input.employment_status}}_employmentStatus"}
+    label: Employment status
+    when: {is_student: ["No"]}
+    optional: true
+  - id: government_employee
+    do: check
+    target: {id: "answer{{input.government_employee}}_isGovEmployee"}
+    label: Government employee
+    when: {employment_status: [Employed]}
+    optional: true
+  - {id: next_5, do: click, target: {role: button, role_name: Next}, expect: {url_contains: /find-scheme/screen-income}}
+
+  # last screen
+  - id: occupation
+    do: select
+    target: {after_text: Is your occupation one of the following, alt: [{css: main select, nth: 0}]}
+    value: "{{input.occupation}}"
+    label: Occupation
+    when: {employment_status: [Employed, Self-Employed/ Entrepreneur]}
+    optional: true
+  - {id: bpl, do: check, target: {id: "answer{{input.bpl}}_isBpl"}, label: BPL}
+  - id: economic_distress
+    do: check
+    target: {id: "answer{{input.economic_distress}}_isEconomicDistress"}
+    label: Economic distress
+    when: {bpl: ["Yes"]}
+    optional: true
+  - id: see_results
+    do: click
+    # Shows "Submit" but its accessible name is still "Next".
+    target: {role: button, role_name: Next, alt: [{text: Submit}]}
+    intent: Submit the questionnaire to see matching schemes (a search; nothing is filed)
+    expect: {url_contains: /search/user-journey}
+    timeout_ms: 30000
+  - id: results
+    do: extract
+    extract: {count_regex: "We found (\\d+) schemes", items_css: "main h2 > a[href^='/schemes/']", empty_regex: No Schemes Found, limit: 10}
+    timeout_ms: 20000

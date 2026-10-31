@@ -1,0 +1,16 @@
+portal_id: cpgrams
+name: CPGRAMS (pgportal.gov.in)
+base_url: https://pgportal.gov.in
+allowed_domains: [pgportal.gov.in]
+is_sandbox: false
+# Off until recon is finished and the team agrees a genuine grievance will be filed.
+# Every filing on this portal is a real grievance to a real ministry.
+submission_enabled: false
+error_selector: "[role=alert], .error, .alert-danger, .text-danger"
+human_steps: [otp, captcha, login]
+rate_limit: {max_concurrent: 1, min_gap_s: 30, jitter_s: 15}
+terms_url: https://pgportal.gov.in/
+notes: >
+  Citizens register once; lodging ends with a CAPTCHA and returns a registration
+  number. Recon still has to confirm: the sign-up OTP flow, the lodge-form field
+  ids, and whether the status page needs a CAPTCHA or a login.

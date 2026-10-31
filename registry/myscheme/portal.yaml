@@ -1,0 +1,17 @@
+portal_id: myscheme
+name: myScheme (Government of India scheme finder)
+base_url: https://www.myscheme.gov.in
+allowed_domains: [myscheme.gov.in]
+is_sandbox: false
+# Read-only: the "Find schemes for you" questionnaire files nothing and needs no login.
+submission_enabled: false
+# Not [role=alert]: Next.js route announcers use it for page titles.
+error_selector: "main span.text-red-600"
+block_resources: true
+public_demo: true
+rate_limit: {max_concurrent: 2, min_gap_s: 3, jitter_s: 2}
+notes: >
+  Real, live government portal. The scheme finder is a React wizard whose radio
+  buttons are hidden behind their labels, and whose questions appear only after
+  earlier answers (marital status, disability %, employment, economic distress).
+  Mapped on 2026-10-31.

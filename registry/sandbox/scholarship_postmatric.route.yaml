@@ -1,0 +1,184 @@
+portal_id: sandbox
+service_id: scholarship_postmatric
+version: 1
+status: stable
+description: Post-Matric Scholarship application (sandbox replica, NSP-style flow)
+tracking:
+  status_url: ${SANDBOX_URL}/
+  hint: Track with the Application ID on the portal.
+profile_match: [state, district, category, course_level]
+
+inputs:
+  - {key: full_name, label: Applicant name, max_len: 80, pattern: "[A-Za-z .'-]{2,80}"}
+  - {key: dob, label: Date of birth, pattern: "\\d{4}-\\d{2}-\\d{2}"}
+  - {key: gender, label: Gender, enum: [Male, Female, Transgender]}
+  - {key: state, label: State of domicile, max_len: 60}
+  - {key: district, label: District, max_len: 60}
+  - {key: category, label: Category, enum: [General, OBC, SC, ST, EWS]}
+  - {key: course_level, label: Course level, enum: [Class 11, Class 12, Diploma, Undergraduate, Postgraduate]}
+  - {key: institution, label: Institution, free_text: true, max_len: 120}
+  - {key: annual_income, label: Annual family income (₹), pattern: "\\d{1,9}"}
+  - {key: ifsc, label: IFSC, pattern: "[A-Z]{4}0[A-Z0-9]{6}", verify: ifsc}
+  - {key: mobile, source: vault, label: Mobile number}
+  - {key: email, source: vault, label: Email}
+  - {key: bank_account, source: vault, label: Bank account number}
+
+documents:
+  - {key: income_certificate, label: Income certificate, max_kb: 200, formats: [pdf, jpg], max_px: 1600}
+  - {key: photo, label: Photograph, max_kb: 50, formats: [jpg], max_px: 600}
+
+steps:
+  # login ------------------------------------------------------------------
+  - id: open_login
+    do: goto
+    url: "{{portal.base_url}}/login?next=/scholarship/apply/1"
+    expect: {visible_text: Registered Mobile Number}
+  - id: fill_mobile
+    do: fill
+    target: {id: mobileNo}
+    value: "{{vault.mobile}}"
+    intent: Registered mobile number on the login page
+  - id: send_otp
+    do: click
+    target: {id: sendOtp, alt: [{role: button, role_name: Send OTP}]}
+    expect: {url_contains: /login/otp}
+  - id: otp
+    do: human_step
+    kind: otp
+    completion: auto
+    expect: {url_contains: /scholarship/apply/1, no_error: false}
+
+  # page 1: applicant details -------------------------------------------------
+  - id: page1
+    do: wait_for
+    expect: {heading: Applicant Details}
+    fingerprint: [fullName, dob, gender, email, state, district, category]
+  - id: fill_name
+    do: fill
+    target: {id: fullName}
+    value: "{{input.full_name}}"
+    label: Applicant Name (as per Class 10 certificate)
+    intent: Applicant name as per Class 10 certificate
+  - id: fill_dob
+    do: fill
+    target: {id: dob}
+    value: "{{input.dob}}"
+    label: Date of Birth
+    intent: Applicant date of birth
+  - id: select_gender
+    do: select
+    target: {id: gender}
+    value: "{{input.gender}}"
+    label: Gender
+  - id: fill_email
+    do: fill
+    target: {id: email}
+    value: "{{vault.email}}"
+    label: Email Address
+  - id: select_state
+    do: select
+    target: {id: state}
+    value: "{{input.state}}"
+    label: State of Domicile
+    wait_options: {id: district}
+  - id: select_district
+    do: select
+    target: {id: district}
+    value: "{{input.district}}"
+    label: District
+  - id: select_category
+    do: select
+    target: {id: category}
+    value: "{{input.category}}"
+    label: Category
+  - id: next_1
+    do: click
+    target: {id: next1, alt: [{role: button, role_name: Save & Next}]}
+    intent: Save page 1 and go to page 2 (Academic and Bank Details)
+    expect: {heading: Academic and Bank Details}
+
+  # page 2: academic and bank -------------------------------------------------
+  - id: page2
+    do: wait_for
+    expect: {heading: Academic and Bank Details}
+    fingerprint: [courseLevel, institution, annualIncome, bankAccount, bankAccountConfirm, ifsc]
+  - id: select_course
+    do: select
+    target: {id: courseLevel}
+    value: "{{input.course_level}}"
+    label: Course Level
+  - id: fill_institution
+    do: fill
+    target: {id: institution}
+    value: "{{input.institution}}"
+    label: Name of Institution
+    intent: Name of the school or college
+  - id: fill_income
+    do: fill
+    target: {id: annualIncome}
+    value: "{{input.annual_income}}"
+    label: Annual Family Income (₹)
+    intent: Annual family income in rupees
+  - id: fill_account
+    do: fill
+    target: {id: bankAccount}
+    value: "{{vault.bank_account}}"
+    label: Bank Account Number
+    intent: Bank account number
+  - id: fill_account_confirm
+    do: fill
+    target: {id: bankAccountConfirm}
+    value: "{{vault.bank_account}}"
+    label: Confirm Bank Account Number
+    intent: Re-enter bank account number to confirm
+  - id: fill_ifsc
+    do: fill
+    target: {id: ifsc}
+    value: "{{input.ifsc}}"
+    label: IFSC Code
+  - id: next_2
+    do: click
+    target: {id: next2, alt: [{role: button, role_name: Save & Next}]}
+    intent: Save page 2 and go to the document upload page
+    expect: {heading: Upload Documents}
+
+  # page 3: documents ---------------------------------------------------------
+  - id: upload_income
+    do: upload
+    target: {id: incomeCert}
+    value: "{{doc.income_certificate}}"
+    label: Income Certificate
+    intent: Upload the income certificate
+  - id: upload_photo
+    do: upload
+    target: {id: photo}
+    value: "{{doc.photo}}"
+    label: Photograph
+    intent: Upload the passport-size photograph
+  - id: next_3
+    do: click
+    target: {id: next3, alt: [{role: button, role_name: Upload & Next}]}
+    expect: {heading: Review and Submit}
+
+  # page 4: review, human steps, approval, submit -------------------------------
+  - id: declare
+    do: check
+    target: {id: declaration}
+    label: "Declaration: information is true (you confirm this by approving)"
+    intent: Tick the declaration checkbox
+  - id: captcha
+    do: human_step
+    kind: captcha
+    completion: human_done
+    expect: {field_filled: {id: captchaInput}, no_error: false}
+  - id: final_review
+    do: approval_gate
+  - id: submit
+    do: click
+    target: {id: finalSubmit, alt: [{role: button, role_name: Final Submit}]}
+    submit: true
+    retry: never
+    expect: {visible_text: submitted successfully}
+    capture: {reference_no: "Application ID is\\s+(SBX-SCH/\\d{4}/\\d+)"}
+    recover:
+      - {error_contains: Invalid CAPTCHA, goto: declare, max_times: 2}

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Civic Pulse · Your application</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#5b6470; --line:#dfe3e8; --brand:#0b6e4f; --warn:#a15c00; --bad:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4b0; --line:#2b323b; --brand:#3ccf91; --warn:#f0b35a; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 12px 0; }
+  .status { display:inline-block; padding:2px 10px; border-radius:99px; background:var(--line); font-weight:600; }
+  .timing { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+  .timing div { background: var(--bg); border-radius: 8px; padding: 8px; }
+  .timing b { display:block; font-size: 20px; }
+  table { width:100%; border-collapse: collapse; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { color: var(--muted); width: 42%; }
+  .flag { color: var(--warn); }
+  .btns { display:flex; gap:10px; margin-top: 12px; flex-wrap: wrap; }
+  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--brand); color: #fff; border-color: transparent; font-weight: 600; }
+  button.danger { color: var(--bad); }
+  #live { width: 100%; border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; touch-action: manipulation; background:#000; min-height: 120px; }
+  .typer { display:flex; gap:8px; margin-top: 8px; }
+  .typer input { flex:1; font: inherit; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .log { font: 12px/1.4 ui-monospace, Menlo, monospace; max-height: 220px; overflow: auto; white-space: pre-wrap; }
+  .log .security { color: var(--warn); }
+  .log .heal { color: var(--brand); }
+  .log .error { color: var(--bad); }
+  .thought { border-left: 3px solid var(--brand); padding: 4px 10px; margin: 6px 0; }
+  .thought.security { border-color: var(--warn); }
+  .thought .acts { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); }
+  #results li { margin: 4px 0; }
+  a { color: var(--brand); }
+  img.shot { width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; }
+  .hidden { display: none; }
+  .sandbox { background: #fff3cd; color: #5c4400; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <div class="muted">Civic Pulse · assisted filing</div>
+  <h1 id="title">Your request</h1>
+  <div class="muted" id="portal-line"></div>
+  <div><span class="status" id="status">loading…</span> <span class="muted" id="error"></span></div>
+
+  <div class="card">
+    <div class="timing">
+      <div><span class="muted">Agent time</span><b id="t-agent">–</b></div>
+      <div><span class="muted">Waiting for you</span><b id="t-human">–</b></div>
+      <div><span class="muted">Model calls</span><b id="t-model">–</b></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="human">
+    <h2 style="font-size:17px;margin:0 0 6px">Your turn</h2>
+    <p id="human-text"></p>
+    <img id="live" alt="Live view of the portal page">
+    <div class="typer">
+      <input id="typer" placeholder="Tap a field above, then type here" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="send">Type</button>
+    </div>
+    <div class="btns">
+      <button id="bksp">⌫ Backspace</button>
+      <button id="enter">Enter</button>
+      <button class="primary" id="done">Done</button>
+      <button class="danger" id="cancel">Cancel</button>
+    </div>
+    <p class="muted">What you type goes straight into the portal page. It is not stored and never shown to the AI.</p>
+    <p class="muted hidden" id="sms-help">Sandbox: the OTP is in the <a href="/app/sandbox/sms" target="_blank">sandbox phone inbox</a>.</p>
+  </div>
+
+  <div class="card hidden" id="reasoning-card">
+    <h2 style="font-size:17px;margin:0 0 6px">What the agent is thinking</h2>
+    <div class="muted" style="margin-bottom:6px">AI decisions, repairs and blocked actions. Sensitive values are never shown to the AI.</div>
+    <div id="reasoning"></div>
+  </div>
+
+  <div class="card hidden" id="approval">
+    <h2 style="font-size:17px;margin:0 0 6px">Check and approve</h2>
+    <div id="sandbox-banner" class="sandbox hidden">Sandbox replica: not a government website</div>
+    <p id="service" class="muted"></p>
+    <table id="values"></table>
+    <div id="diffs"></div>
+    <p id="next"></p>
+    <img class="shot" id="shot" alt="Screenshot of the final review page">
+    <div class="btns" id="approve-btns">
+      <button class="primary" id="approve">Approve and submit</button>
+      <button class="danger" id="reject">Reject</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="results-card">
+    <h2 style="font-size:17px;margin:0 0 6px" id="results-title">Results from the portal</h2>
+    <ol id="results"></ol>
+    <p class="muted" id="results-src"></p>
+  </div>
+
+  <div class="card hidden" id="receipt">
+    <h2 style="font-size:17px;margin:0 0 6px">Receipt</h2>
+    <table id="receipt-table"></table>
+    <p class="muted">The signature shows this record has not been changed since it was issued. It does not prove the portal accepted the application.</p>
+  </div>
+
+  <div class="card"><div class="muted" style="margin-bottom:6px">Activity</div><div class="log" id="log"></div></div>
+</main>
+<script>
+const parts = location.pathname.split('/');
+const taskId = parts[2];
+const token = new URLSearchParams(location.search).get('t');
+const q = `?t=${encodeURIComponent(token)}`;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const secs = ms => ms == null ? '–' : (ms / 1000).toFixed(1) + 's';
+let ws = null, shotLoaded = false;
+
+async function post(path, body) {
+  const r = await fetch(`/citizen/${taskId}${path}${q}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {}) });
+  if (!r.ok) alert((await r.json()).detail || 'Request failed');
+}
+
+function openLive() {
+  if (ws) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/citizen/${taskId}/live${q}`);
+  ws.onmessage = e => { const m = JSON.parse(e.data); $('live').src = 'data:image/jpeg;base64,' + m.frame; };
+  ws.onclose = () => { ws = null; };
+}
+function send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); }
+
+$('live').addEventListener('click', e => {
+  const r = e.target.getBoundingClientRect();
+  send({ t: 'click', x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+  $('typer').focus();
+});
+$('send').onclick = () => { const v = $('typer').value; if (v) { send({ t: 'type', text: v }); $('typer').value = ''; } };
+$('typer').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('send').onclick(); } });
+$('bksp').onclick = () => send({ t: 'key', key: 'Backspace' });
+$('enter').onclick = () => send({ t: 'key', key: 'Enter' });
+$('done').onclick = () => post('/human/done');
+$('cancel').onclick = () => { if (confirm('Stop this application?')) post('/human/cancel'); };
+$('approve').onclick = () => post('/approve', { decision: 'approved' });
+$('reject').onclick = () => post('/approve', { decision: 'rejected' });
+
+function render(s) {
+  if (s.portal) $('portal-line').textContent = `${s.portal.name}${s.portal.is_sandbox ? ' · sandbox replica, not a government website' : ' · live government portal'}`;
+  $('sms-help').classList.toggle('hidden', !(s.portal && s.portal.is_sandbox && s.human && s.human.kind === 'otp'));
+  const th = s.reasoning || [];
+  $('reasoning-card').classList.toggle('hidden', !th.length);
+  $('reasoning').innerHTML = th.map(t => `<div class="thought ${t.kind === 'security' ? 'security' : ''}">${t.kind === 'reasoning' && t.turn ? `<b>Turn ${t.turn}.</b> ` : t.kind === 'security' ? '🛡 ' : t.kind === 'heal' ? '🔧 ' : ''}${esc(t.message)}${t.actions && t.actions.length ? `<div class="acts">${t.actions.map(a => esc(a.action + ' ' + a.ref + (a.value_key ? ' ← ' + a.value_key : ''))).join(' · ')}</div>` : ''}</div>`).join('');
+  $('status').textContent = s.status.replace(/_/g, ' ');
+  $('error').textContent = s.error || '';
+  $('t-agent').textContent = secs(s.timing.agent_ms);
+  $('t-human').textContent = secs(s.timing.human_wait_ms);
+  $('t-model').textContent = s.timing.model_calls ?? '–';
+
+  const human = !!s.human;
+  $('human').classList.toggle('hidden', !human);
+  if (human) { $('human-text').textContent = s.human.instructions; openLive(); }
+
+  const card = s.card;
+  $('approval').classList.toggle('hidden', !card);
+  if (card) {
+    $('sandbox-banner').classList.toggle('hidden', !card.portal.is_sandbox);
+    $('service').textContent = `${card.portal.name} · ${card.service}`;
+    const rows = card.values.map(v => `<tr><td>${esc(v.label)}</td><td>${esc(v.value)}${v.readback_ok ? '' : ' <span class="flag">⚠ check</span>'}</td></tr>`);
+    card.documents.forEach(d => rows.push(`<tr><td>Document: ${esc(d.key)}</td><td>${esc(d.size_kb)} KB · ${esc(d.note)}</td></tr>`));
+    card.agent_extra_actions.forEach(a => rows.push(`<tr><td>Extra step by the agent</td><td>${esc(a)}</td></tr>`));
+    $('values').innerHTML = rows.join('');
+    const notes = [...card.differences.map(d => '⚠ ' + d), ...card.warnings.map(w => '🛡 ' + w)];
+    $('diffs').innerHTML = notes.map(n => `<p class="flag">${esc(n)}</p>`).join('');
+    $('next').textContent = card.next;
+    if (!shotLoaded) { $('shot').src = `/citizen/${taskId}/approval.png${q}&v=${Date.now()}`; shotLoaded = true; }
+    $('approve-btns').classList.toggle('hidden', !s.approval_pending);
+  }
+
+  if (s.receipt && s.receipt.result) {
+    const res = s.receipt.result;
+    $('results-card').classList.remove('hidden');
+    $('results-title').textContent = res.count === 0 ? 'The portal found no matching results' : `Results from the portal${res.count != null ? ` (${res.count} found, first ${res.items.length} shown)` : ''}`;
+    $('results').innerHTML = res.items.map(i => `<li>${i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>` : esc(i.title)}</li>`).join('');
+    $('results-src').textContent = `Read live from ${res.source_url} at ${new Date(res.retrieved_at).toLocaleString()}. Listed by the portal, not by the AI.`;
+  }
+  if (s.receipt) {
+    const r = s.receipt;
+    $('receipt').classList.remove('hidden');
+    $('receipt-table').innerHTML = [
+      ['Outcome', r.outcome.replace(/_/g, ' ')], ...(r.outcome === 'information_retrieved' ? [] : [['Reference number', r.reference_no || '—']]),
+      ['Receipt id', r.receipt_id], ['Signed by key', r.signer_key_id], ['Evidence items', r.evidence.length],
+    ].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+  }
+  $('log').innerHTML = s.log.map(l => `<div class="${esc(l.kind)}">[${esc(l.kind)}] ${esc(l.message)}</div>`).join('');
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+async function tick() {
+  try {
+    const r = await fetch(`/citizen/${taskId}/state${q}`);
+    if (r.ok) render(await r.json());
+  } catch (e) {}
+  setTimeout(tick, 1000);
+}
+tick();
+</script>
+</body>
+</html>

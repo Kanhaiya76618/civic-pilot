@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Civic Pulse Agent</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#5b6470; --line:#dfe3e8; --brand:#0b6e4f; --brand-soft:#e5f3ed; --warn:#a15c00; --bad:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4b0; --line:#2b323b; --brand:#3ccf91; --brand-soft:#173327; --warn:#f0b35a; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 24px; margin: 8px 0 2px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .badges { display:flex; flex-wrap:wrap; gap:6px; margin: 10px 0 4px; }
+  .badge { font-size:12px; padding:3px 9px; border-radius:99px; background:var(--brand-soft); color:var(--brand); font-weight:600; }
+  .badge.gray { background: var(--line); color: var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin:12px 0; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:10px; }
+  .svc { text-align:left; cursor:pointer; border:1px solid var(--line); border-radius:12px; padding:12px; background:var(--card); color:inherit; font:inherit; }
+  .svc:hover, .svc.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+  .svc b { display:block; margin-bottom:4px; }
+  label { display:block; font-weight:600; font-size:14px; margin-top:12px; }
+  input, select, textarea { width:100%; font:inherit; padding:9px 10px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); margin-top:4px; }
+  textarea { min-height: 90px; }
+  fieldset { border:1px dashed var(--line); border-radius:12px; padding: 4px 12px 12px; margin-top:14px; }
+  legend { font-weight:600; padding: 0 6px; }
+  .hint { font-size:13px; color: var(--muted); margin-top:4px; }
+  .ok { color: var(--brand); } .err { color: var(--bad); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; } .row > div { flex:1; min-width: 200px; }
+  .check { display:flex; gap:8px; align-items:flex-start; font-weight:400; } .check input { width:auto; margin-top:4px; }
+  button.primary { margin-top:16px; font:inherit; font-weight:600; padding:11px 18px; border-radius:10px; border:0; background:var(--brand); color:#fff; cursor:pointer; }
+  button.primary:disabled { opacity:.5; cursor:not-allowed; }
+  table { width:100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); white-space: nowrap; }
+  .table-wrap { overflow-x:auto; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="muted">Civic Pulse · Part 3</div>
+  <h1>Let the agent fill the portal for you</h1>
+  <p class="muted" style="margin:0">It fills government forms in a real browser. You do the OTP and CAPTCHA, and you approve anything that would be filed.</p>
+  <div class="badges">
+    <span class="badge">Live portal: myScheme.gov.in</span>
+    <span class="badge">Live API: India Post PIN codes</span>
+    <span class="badge">Live API: RBI IFSC data</span>
+    <span class="badge gray">Sandbox replica for filings</span>
+  </div>
+
+  <div class="card">
+    <h2>1 · Choose a service</h2>
+    <div class="grid" id="services"><span class="muted">Loading…</span></div>
+  </div>
+
+  <form class="card hidden" id="form">
+    <h2>2 · Your details</h2>
+    <p class="muted" id="svc-desc" style="margin-top:0"></p>
+    <div id="pin-box" class="hidden">
+      <label for="pin">PIN code <span class="muted">(fills state and district from live India Post data)</span></label>
+      <input id="pin" inputmode="numeric" maxlength="6" placeholder="e.g. 823001">
+      <div class="hint" id="pin-out"></div>
+    </div>
+    <div id="fields"></div>
+    <fieldset id="private-box" class="hidden">
+      <legend>Private details</legend>
+      <div class="hint">Encrypted in a vault. The AI never sees these; only the browser step that types them does.</div>
+      <div id="private"></div>
+    </fieldset>
+    <fieldset id="docs-box" class="hidden">
+      <legend>Documents</legend>
+      <div class="hint">Resized automatically to the portal's limits.</div>
+      <div id="docs"></div>
+    </fieldset>
+    <div class="row" id="options"></div>
+    <label class="check"><input type="checkbox" id="consent" required> <span id="consent-text"></span></label>
+    <button class="primary" id="go" type="submit">Start</button>
+    <div class="hint err" id="form-err"></div>
+  </form>
+
+  <div class="card">
+    <h2>Recent runs</h2>
+    <div class="hint" style="margin-top:-6px">Agent time excludes the time spent waiting for the citizen. No personal data is shown.</div>
+    <div class="table-wrap"><table><thead><tr><th>Service</th><th>How</th><th>Status</th><th>Results</th><th>Agent</th><th>Waiting</th><th>Model calls</th></tr></thead><tbody id="runs"></tbody></table></div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let services = [], svc = null;
+
+function fieldHtml(i) {
+  const id = 'f_' + i.key, label = esc(i.label || i.key), req = i.required ? 'required' : '';
+  const opt = i.required ? '' : ' <span class="muted">(optional)</span>';
+  if (i.enum) return `<label for="${id}">${label}${opt}</label><select id="${id}" ${req}><option value="">Select…</option>${i.enum.map(v => `<option>${esc(v)}</option>`).join('')}</select>`;
+  if (i.free_text && i.max_len > 200) return `<label for="${id}">${label}${opt}</label><textarea id="${id}" maxlength="${i.max_len}" ${req}></textarea>`;
+  let type = 'text', extra = '';
+  if (i.key === 'dob') type = 'date';
+  else if (/age|income|percentage/.test(i.key)) { type = 'number'; extra = 'min="0"'; }
+  return `<label for="${id}">${label}${opt}</label><input id="${id}" type="${type}" ${extra} maxlength="${i.max_len || 200}" ${req}>` +
+         (i.key === 'ifsc' ? '<div class="hint" id="ifsc-out"></div>' : '');
+}
+
+function pick(s, btn) {
+  svc = s;
+  document.querySelectorAll('.svc').forEach(b => b.classList.toggle('on', b === btn));
+  $('form').classList.remove('hidden');
+  $('svc-desc').textContent = `${s.portal_name} · ${s.description}`;
+  const pub = s.inputs.filter(i => i.source === 'input'), priv = s.inputs.filter(i => i.source === 'vault');
+  $('fields').innerHTML = pub.map(fieldHtml).join('');
+  $('private').innerHTML = priv.map(i => `<label for="p_${i.key}">${esc(i.label || i.key)}</label><input id="p_${i.key}" ${i.key === 'mobile' ? 'type="tel" inputmode="numeric" maxlength="10"' : i.key === 'email' ? 'type="email"' : 'inputmode="numeric"'} autocomplete="off" required>`).join('');
+  $('private-box').classList.toggle('hidden', !priv.length);
+  $('docs').innerHTML = s.documents.map(d => `<label for="d_${d.key}">${esc(d.label || d.key)}${d.required ? '' : ' <span class="muted">(optional)</span>'}</label><input id="d_${d.key}" type="file" accept="${d.formats.map(f => f === 'jpg' ? '.jpg,.jpeg,.png' : '.' + f).join(',')}" ${d.key === 'photo' || d.key === 'attachment' ? 'capture="environment"' : ''} ${d.required ? 'required' : ''}>`).join('');
+  $('docs-box').classList.toggle('hidden', !s.documents.length);
+  const keys = pub.map(i => i.key);
+  $('pin-box').classList.toggle('hidden', !keys.includes('state'));
+  if (keys.includes('pincode')) $('pin-box').classList.add('hidden');
+  let opts = '';
+  if (!s.read_only) opts += `<div><label for="mode">What should happen</label><select id="mode"><option value="dry_run">Dry run: stop before submitting</option>${s.submission_enabled && s.status === 'stable' ? '<option value="assist">File it after I approve</option>' : ''}</select></div>`;
+  if (s.explorable && s.has_recorded_route) opts += `<div><label for="strategy">How the agent works</label><select id="strategy"><option value="route">Replay the recorded route (fast, no AI calls)</option><option value="explore">Let the AI explore live (shows its reasoning)</option></select></div>`;
+  else if (s.explorable) opts += `<div><label>How the agent works</label><div class="hint">No recorded route yet: the AI explores this portal live and records the route for next time.</div></div>`;
+  $('options').innerHTML = opts;
+  $('consent-text').textContent = `I agree that Civic Pulse may fill "${s.description}" on ${s.portal_name} for me during the next 24 hours. Nothing is submitted without my approval.`;
+  $('ifsc-out') && $('f_ifsc').addEventListener('input', checkIfsc);
+  $('form').scrollIntoView({behavior: 'smooth'});
+}
+
+async function checkIfsc() {
+  const v = $('f_ifsc').value.trim().toUpperCase();
+  if (v.length !== 11) { $('ifsc-out').textContent = ''; return; }
+  $('ifsc-out').textContent = 'Checking…';
+  const r = await (await fetch('/app/lookup/ifsc/' + encodeURIComponent(v))).json();
+  $('ifsc-out').className = 'hint ' + (r.ok ? 'ok' : r.ok === false ? 'err' : '');
+  $('ifsc-out').textContent = r.ok ? `✓ ${r.data.bank}, ${r.data.branch} (${r.source})` : r.ok === false ? '✗ ' + r.error : 'Could not check right now';
+}
+
+$('pin').addEventListener('input', async () => {
+  const v = $('pin').value.trim();
+  if (v.length !== 6) { $('pin-out').textContent = ''; return; }
+  $('pin-out').textContent = 'Looking up…';
+  const r = await (await fetch('/app/lookup/pincode/' + v)).json();
+  if (!r.ok) { $('pin-out').className = 'hint err'; $('pin-out').textContent = r.ok === false ? '✗ ' + r.error : 'Could not look it up right now; type the state and district.'; return; }
+  $('pin-out').className = 'hint ok';
+  $('pin-out').textContent = `✓ ${r.data.districts.join(', ')}, ${r.data.state} (live from ${r.source})`;
+  const st = $('f_state'); if (st) setValue(st, r.data.state);
+  const di = $('f_district'); if (di) setValue(di, r.data.districts[0]);
+});
+
+function setValue(el, value) {
+  if (el.tagName === 'SELECT') {
+    const norm = x => x.toLowerCase().replace('&', 'and').replace(/[^a-z]/g, '');
+    const o = [...el.options].find(o => norm(o.text) === norm(value));
+    if (o) el.value = o.value;
+  } else el.value = value;
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('go').disabled = true; $('form-err').textContent = '';
+  const inputs = {}, priv = {};
+  svc.inputs.forEach(i => {
+    const el = $((i.source === 'vault' ? 'p_' : 'f_') + i.key);
+    if (el && el.value.trim()) (i.source === 'vault' ? priv : inputs)[i.key] = i.key === 'ifsc' ? el.value.trim().toUpperCase() : el.value.trim();
+  });
+  const fd = new FormData();
+  fd.append('payload', JSON.stringify({
+    portal_id: svc.portal_id, service_id: svc.service_id, inputs, private: priv, consent: $('consent').checked,
+    mode: $('mode') ? $('mode').value : 'assist', strategy: $('strategy') ? $('strategy').value : 'auto', language: navigator.language,
+  }));
+  svc.documents.forEach(d => { const f = $('d_' + d.key).files[0]; if (f) fd.append('files', f, d.key + '::' + f.name); });
+  try {
+    const r = await fetch('/app/start', { method: 'POST', body: fd });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || 'Could not start');
+    location.href = body.citizen_path;
+  } catch (err) { $('form-err').textContent = err.message; $('go').disabled = false; }
+});
+
+async function loadServices() {
+  services = await (await fetch('/app/services')).json();
+  $('services').innerHTML = '';
+  services.forEach(s => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'svc';
+    const tags = [s.is_sandbox ? 'Sandbox replica' : 'Live government portal', s.read_only ? 'Lookup' : 'Filing · approval required'];
+    if (s.explorable) tags.push('AI explore');
+    b.innerHTML = `<b>${esc(s.description)}</b><span class="muted">${esc(s.portal_name)}</span><div class="badges">${tags.map(t => `<span class="badge ${t.startsWith('Sandbox') ? 'gray' : ''}">${esc(t)}</span>`).join('')}</div>`;
+    b.onclick = () => pick(s, b);
+    $('services').appendChild(b);
+  });
+}
+
+const secs = ms => ms == null ? '–' : (ms / 1000).toFixed(1) + 's';
+async function loadRuns() {
+  try {
+    const runs = await (await fetch('/app/runs')).json();
+    $('runs').innerHTML = runs.map(r => `<tr><td>${esc(r.service)}</td><td>${esc(r.strategy)}</td><td>${esc(r.status.replace(/_/g, ' '))}</td><td>${r.results ?? (r.outcome ? esc(r.outcome.replace(/_/g, ' ')) : '–')}</td><td>${secs(r.timing.agent_ms)}</td><td>${secs(r.timing.human_wait_ms)}</td><td>${r.timing.model_calls ?? 0}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No runs yet</td></tr>';
+  } catch (e) {}
+  setTimeout(loadRuns, 5000);
+}
+loadServices(); loadRuns();
+</script>
+</body>
+</html>

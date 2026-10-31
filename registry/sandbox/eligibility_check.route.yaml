@@ -1,0 +1,16 @@
+portal_id: sandbox
+service_id: eligibility_check
+version: 1
+status: stable
+read_only: true
+description: Check scheme eligibility (sandbox replica). No recorded route, so the AI explores it.
+inputs:
+  - {key: state, label: State, max_len: 60}
+  - {key: category, label: Category, enum: [General, OBC, SC, ST, EWS]}
+  - {key: annual_income, label: Annual family income, pattern: "\\d{1,9}"}
+explore:
+  start_url: ${SANDBOX_URL}/eligibility
+  goal: Fill in the eligibility form with the citizen's details and open the results.
+  finish_when: {heading: Eligibility Results}
+  extract: {count_regex: "We found (\\d+) schemes", items_css: "a.scheme", empty_regex: We found 0 schemes, limit: 10}
+  max_actions: 12
