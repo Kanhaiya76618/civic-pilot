@@ -76,7 +76,7 @@ class CivicGISRouter:
         c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
         return r * c
 
-    def resolve_location(self, lat: float, lon: float, custom_address: str = None) -> Dict[str, Any]:
+    def resolve_location(self, lat: float, lon: float, custom_address: str = None, *args, **kwargs) -> Dict[str, Any]:
         """
         Point-in-Polygon check to resolve exact municipal ward, zone, and jurisdiction.
         Accurately handles Bangalore BBMP, Pune PMC, Hubballi-Dharwad HDMC, Belagavi, 
