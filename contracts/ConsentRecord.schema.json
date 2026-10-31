@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "consent_id": {
+      "title": "Consent Id",
+      "type": "string"
+    },
+    "citizen_id": {
+      "title": "Citizen Id",
+      "type": "string"
+    },
+    "portal_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Portal Ids",
+      "type": "array"
+    },
+    "service_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Service Ids",
+      "type": "array"
+    },
+    "purpose": {
+      "title": "Purpose",
+      "type": "string"
+    },
+    "granted_at": {
+      "format": "date-time",
+      "title": "Granted At",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "revoked": {
+      "default": false,
+      "title": "Revoked",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "consent_id",
+    "citizen_id",
+    "portal_ids",
+    "service_ids",
+    "purpose",
+    "expires_at"
+  ],
+  "title": "ConsentRecord",
+  "type": "object"
+}

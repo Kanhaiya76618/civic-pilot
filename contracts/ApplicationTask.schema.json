@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "DocumentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Matches a document key declared by the route, e.g. photo",
+          "title": "Key",
+          "type": "string"
+        },
+        "uri": {
+          "description": "doc://<id> from POST /v1/documents, or an https URL",
+          "title": "Uri",
+          "type": "string"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        }
+      },
+      "required": [
+        "key",
+        "uri"
+      ],
+      "title": "DocumentRef",
+      "type": "object"
+    },
+    "TaskMode": {
+      "enum": [
+        "dry_run",
+        "assist"
+      ],
+      "title": "TaskMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "citizen_id": {
+      "title": "Citizen Id",
+      "type": "string"
+    },
+    "portal_id": {
+      "title": "Portal Id",
+      "type": "string"
+    },
+    "service_id": {
+      "title": "Service Id",
+      "type": "string"
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "description": "Non-sensitive values keyed by route input key",
+      "title": "Inputs",
+      "type": "object"
+    },
+    "documents": {
+      "items": {
+        "$ref": "#/$defs/DocumentRef"
+      },
+      "title": "Documents",
+      "type": "array"
+    },
+    "vault_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Vault Ref"
+    },
+    "consent_id": {
+      "title": "Consent Id",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/TaskMode",
+      "default": "dry_run"
+    },
+    "callback_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Callback Url"
+    },
+    "origin": {
+      "default": "citizen",
+      "enum": [
+        "part1",
+        "part2",
+        "citizen",
+        "eval"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "strategy": {
+      "default": "auto",
+      "description": "auto: replay the recorded route when one exists, else let the AI explore; explore: force a live AI run",
+      "enum": [
+        "auto",
+        "route",
+        "explore"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    },
+    "origin_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Caller's own id, e.g. the Part 2 issue id",
+      "title": "Origin Ref"
+    }
+  },
+  "required": [
+    "idempotency_key",
+    "citizen_id",
+    "portal_id",
+    "service_id",
+    "consent_id"
+  ],
+  "title": "ApplicationTask",
+  "type": "object"
+}

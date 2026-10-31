@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "TaskStatus": {
+      "enum": [
+        "queued",
+        "validating",
+        "preparing_docs",
+        "running",
+        "awaiting_human",
+        "awaiting_approval",
+        "submitting",
+        "verifying",
+        "completed",
+        "failed",
+        "needs_review"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "Timing": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_ms": {
+          "default": 0,
+          "description": "Browser + model time: what the agent itself spent",
+          "title": "Agent Ms",
+          "type": "integer"
+        },
+        "browser_ms": {
+          "default": 0,
+          "title": "Browser Ms",
+          "type": "integer"
+        },
+        "model_ms": {
+          "default": 0,
+          "title": "Model Ms",
+          "type": "integer"
+        },
+        "human_wait_ms": {
+          "default": 0,
+          "title": "Human Wait Ms",
+          "type": "integer"
+        },
+        "total_ms": {
+          "default": 0,
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "model_calls": {
+          "default": 0,
+          "title": "Model Calls",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "title": "Timing",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "seq": {
+      "default": 0,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "kind": {
+      "default": "status",
+      "enum": [
+        "status",
+        "step",
+        "human_needed",
+        "approval_needed",
+        "heal",
+        "security",
+        "receipt",
+        "info",
+        "error",
+        "reasoning"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "step_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Step Id"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "timing": {
+      "$ref": "#/$defs/Timing"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "status"
+  ],
+  "title": "TaskEvent",
+  "type": "object"
+}

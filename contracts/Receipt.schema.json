@@ -1,0 +1,206 @@
+{
+  "$defs": {
+    "EvidenceItem": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "sha256"
+      ],
+      "title": "EvidenceItem",
+      "type": "object"
+    },
+    "TaskMode": {
+      "enum": [
+        "dry_run",
+        "assist"
+      ],
+      "title": "TaskMode",
+      "type": "string"
+    },
+    "Timing": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_ms": {
+          "default": 0,
+          "description": "Browser + model time: what the agent itself spent",
+          "title": "Agent Ms",
+          "type": "integer"
+        },
+        "browser_ms": {
+          "default": 0,
+          "title": "Browser Ms",
+          "type": "integer"
+        },
+        "model_ms": {
+          "default": 0,
+          "title": "Model Ms",
+          "type": "integer"
+        },
+        "human_wait_ms": {
+          "default": 0,
+          "title": "Human Wait Ms",
+          "type": "integer"
+        },
+        "total_ms": {
+          "default": 0,
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "model_calls": {
+          "default": 0,
+          "title": "Model Calls",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "title": "Timing",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "receipt_id": {
+      "title": "Receipt Id",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "portal_id": {
+      "title": "Portal Id",
+      "type": "string"
+    },
+    "service_id": {
+      "title": "Service Id",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/TaskMode"
+    },
+    "outcome": {
+      "enum": [
+        "submitted",
+        "dry_run_complete",
+        "information_retrieved"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "reference_no": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference No"
+    },
+    "submitted_at": {
+      "format": "date-time",
+      "title": "Submitted At",
+      "type": "string"
+    },
+    "approved_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Who approved: 'citizen' via the approval card",
+      "title": "Approved By"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/EvidenceItem"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "tracking": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Status-page URL and hints for Part 2",
+      "title": "Tracking",
+      "type": "object"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For read-only services: what the portal returned (source_url, retrieved_at, count, items)",
+      "title": "Result"
+    },
+    "origin_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Origin Ref"
+    },
+    "timing": {
+      "$ref": "#/$defs/Timing"
+    },
+    "signer_key_id": {
+      "default": "",
+      "title": "Signer Key Id",
+      "type": "string"
+    },
+    "signature": {
+      "default": "",
+      "description": "Base64 Ed25519 over the canonical JSON of every other field",
+      "title": "Signature",
+      "type": "string"
+    }
+  },
+  "required": [
+    "receipt_id",
+    "task_id",
+    "portal_id",
+    "service_id",
+    "mode",
+    "outcome",
+    "submitted_at"
+  ],
+  "title": "Receipt",
+  "type": "object"
+}

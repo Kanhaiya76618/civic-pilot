@@ -1,0 +1,96 @@
+{
+  "additionalProperties": false,
+  "description": "Non-sensitive attributes only. Phone, email, bank details live in the vault.",
+  "properties": {
+    "citizen_id": {
+      "title": "Citizen Id",
+      "type": "string"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "district": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "District"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Social category, e.g. General, OBC, SC, ST, EWS",
+      "title": "Category"
+    },
+    "course_level": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Course Level"
+    },
+    "preferred_language": {
+      "default": "en-IN",
+      "description": "BCP-47 tag, e.g. hi-IN, ta-IN",
+      "title": "Preferred Language",
+      "type": "string"
+    },
+    "vault_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Pointer to encrypted sensitive fields held by Part 3",
+      "title": "Vault Ref"
+    },
+    "attributes": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Attributes",
+      "type": "object"
+    }
+  },
+  "required": [
+    "citizen_id",
+    "state"
+  ],
+  "title": "CitizenProfile",
+  "type": "object"
+}
