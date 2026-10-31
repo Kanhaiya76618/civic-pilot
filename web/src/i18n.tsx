@@ -10,6 +10,7 @@ const STRINGS = {
   navSchemes: { en: "Know your schemes", hi: "योजनाएँ जानें" },
   navGrievance: { en: "Report a problem", hi: "शिकायत दर्ज करें" },
   navBoard: { en: "Accountability board", hi: "जवाबदेही बोर्ड" },
+  navAdmin: { en: "Municipal Desk", hi: "नगरपालिका डेस्क" },
   navAgent: { en: "Agent room", hi: "एजेंट कक्ष" },
   heroKicker: { en: "Ask · Report · Get it done", hi: "पूछें · बताएँ · काम पूरा करें" },
   heroTitle: { en: "Government paperwork, done with you.", hi: "सरकारी कागज़ी काम, अब आपके साथ।" },

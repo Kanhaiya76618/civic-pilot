@@ -10,6 +10,7 @@ const NAV: { to: string; key: StringKey }[] = [
   { to: "/schemes", key: "navSchemes" },
   { to: "/grievance", key: "navGrievance" },
   { to: "/board", key: "navBoard" },
+  { to: "/admin", key: "navAdmin" },
   { to: "/agent", key: "navAgent" },
 ];
 

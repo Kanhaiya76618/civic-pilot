@@ -13,6 +13,7 @@ const Schemes = lazy(() => import("./pages/Schemes"));
 const Engine = lazy(() => import("./pages/Engine"));
 const Grievance = lazy(() => import("./pages/Grievance"));
 const Board = lazy(() => import("./pages/Board"));
+const Admin = lazy(() => import("./pages/Admin"));
 const AgentHome = lazy(() => import("./pages/AgentHome"));
 const AgentRoom = lazy(() => import("./pages/AgentRoom"));
 const AgentHistory = lazy(() => import("./pages/AgentHistory"));
@@ -34,6 +35,8 @@ function App() {
           <Route path="/schemes/engine" element={<Engine />} />
           <Route path="/grievance" element={<Grievance />} />
           <Route path="/board" element={<Board />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/queue" element={<Admin />} />
           <Route path="/agent" element={<AgentHome />} />
           <Route path="/agent/history" element={<AgentHistory />} />
           <Route path="/agent/runs/:runId" element={<AgentRun />} />

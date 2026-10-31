@@ -28,6 +28,7 @@ from .models import TERMINAL_STATUSES, ApplicationTask, CitizenProfile, ConsentR
 from .receipts import verify
 from .vault import VaultError
 from .worker import Executor
+from server.api import router as unified_civic_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 STATIC = Path(__file__).parent / "static"
@@ -71,6 +72,7 @@ def make_app(executor_factory=None) -> FastAPI:
     def ex() -> Executor:
         return state["executor"]
 
+    app.include_router(unified_civic_router)
     app.include_router(make_router(ex))
     app.include_router(make_console_router(ex))
 
