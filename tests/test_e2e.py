@@ -37,6 +37,10 @@ async def test_scholarship_assist_end_to_end(executor):
     assert human.actions == ["otp", "captcha:ok", "approve"]
     t = receipt.timing
     assert t.human_wait_ms > 0 and t.agent_ms > 0 and t.model_calls == 0
+    steps = [e for e in events(executor, task_id) if e["kind"] == "step"]
+    assert all(e["data"].get("do") and e["data"].get("label") for e in steps)  # the UI's plain-language log
+    bank = next(e for e in steps if e["step_id"] == "fill_account")
+    assert bank["data"]["value"] == "private value from your vault"  # never the number itself
     statuses = [e["status"] for e in events(executor, task_id) if e["kind"] == "status"]
     for s in ["validating", "preparing_docs", "running", "awaiting_human", "awaiting_approval", "submitting", "verifying"]:
         assert s in statuses

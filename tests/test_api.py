@@ -157,7 +157,13 @@ async def test_full_http_flow(api, tmp_path):
 async def test_public_console_endpoints(api):
     async with httpx.AsyncClient(base_url=api, timeout=20) as c:
         home = await c.get("/")
-        assert home.status_code == 200 and "<title>Civic Pulse Agent</title>" in home.text
+        assert home.status_code == 200 and "Civic Pulse" in home.text  # the React app, or the console fallback if unbuilt
+        for route in ["/schemes", "/schemes/engine", "/grievance", "/board", "/agent"]:
+            assert (await c.get(route)).status_code == 200
+        cfg = (await c.get("/app/config")).json()
+        assert cfg["part1_connected"] is False and cfg["part2_connected"] is False
+        assert (await c.post("/app/part1/api/explain", json={"question": "x"})).status_code == 503  # honest "not connected"
+        assert (await c.get("/app/part2/api/public/stats")).status_code == 503
         services = (await c.get("/app/services")).json()
         assert {s["service_id"] for s in services} >= {"find_schemes", "public_grievance"}
         assert all(s["public_demo"] for s in services)
@@ -182,3 +188,35 @@ async def test_public_console_endpoints(api):
         r = await c.post("/v1/admin/sandbox-variant", json={"variant": "inject"}, headers=KEY)
         assert r.json()["variant"] == "inject"
         await c.post("/v1/admin/sandbox-variant", json={"variant": "default"}, headers=KEY)
+
+
+async def test_agent_console_endpoints(api):
+    """Free-form runs over HTTP: create, history, detail, SSE, owner-only controls. The test server has no model,
+    so the run ends with an honest 'needs an AI model' rather than anything made up."""
+    async with httpx.AsyncClient(base_url=api, timeout=20) as c:
+        for route in ["/agent/history", "/agent/runs/run_anything"]:
+            assert (await c.get(route)).status_code == 200  # the React app's own routes
+        assert (await c.post("/app/agent/runs", json={"query": "x"})).status_code == 422  # too short
+        made = await c.post("/app/agent/runs", json={"query": "Pension for my mother, phone 98765 43210, mail a@b.in"})
+        assert made.status_code == 201
+        run_id, token = made.json()["run_id"], made.json()["token"]
+        for _ in range(50):
+            detail = (await c.get(f"/app/agent/runs/{run_id}")).json()
+            if detail["run"]["status"] == "failed":
+                break
+            await asyncio.sleep(0.2)
+        run = detail["run"]
+        assert run["status"] == "failed" and "needs an AI model" in run["error"]
+        assert "token" not in run and "98765" not in run["query"] and "a@b.in" not in run["query"]  # redacted before storage
+        assert run["stats"]["ai_calls"] == 0
+        history = (await c.get("/app/agent/runs")).json()
+        assert history[0]["run_id"] == run_id and all("token" not in r for r in history)
+        sse = await c.get(f"/app/agent/runs/{run_id}/events")
+        assert "event: run" in sse.text and "event: end" in sse.text
+        assert (await c.get(f"/app/agent/runs/{run_id}/steps/1.jpg")).status_code == 404
+        # controls need the run's own token
+        assert (await c.post(f"/app/agent/runs/{run_id}/approve?t=wrong", json={"decision": "approved"})).status_code == 404
+        assert (await c.post(f"/app/agent/runs/{run_id}/approve?t={token}", json={"decision": "approved"})).status_code == 409
+        assert (await c.post(f"/app/agent/runs/{run_id}/cancel?t={token}")).status_code == 409
+        assert (await c.post(f"/app/agent/runs/{run_id}/link?t={token}", json={"task_id": "task_x"})).status_code == 409
+        assert (await c.get(f"/app/agent/runs/{run_id}/room?t=wrong")).status_code == 404
