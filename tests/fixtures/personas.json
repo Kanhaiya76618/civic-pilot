@@ -1,0 +1,29 @@
+{
+  "_note": "Synthetic people for development and demos. Never put real citizen data here. Phone numbers use the 9999 test range; bank numbers are fake.",
+  "personas": [
+    {
+      "profile": {"citizen_id": "cit_priya_bihar", "state": "Bihar", "district": "Gaya", "category": "OBC", "course_level": "Undergraduate", "preferred_language": "hi-IN"},
+      "vault": {"mobile": "9999000101", "email": "priya.test@example.com", "bank_account": "50100012345678"},
+      "inputs": {
+        "scholarship_postmatric": {"full_name": "Priya Kumari", "dob": "2006-03-14", "gender": "Female", "state": "Bihar", "district": "Gaya", "category": "OBC", "course_level": "Undergraduate", "institution": "Gaya College, Gaya", "annual_income": "180000", "ifsc": "SBIN0001234"},
+        "public_grievance": {"ministry": "Ministry of Housing and Urban Affairs", "department": "Municipal Services", "category": "Water Supply", "state": "Bihar", "district": "Gaya", "subject": "Water pipeline leaking on station road for two weeks", "description": "A municipal water pipe near the railway station road has been leaking for two weeks. Water is pooling on the road and supply to nearby homes is low. Please repair the pipeline."}
+      }
+    },
+    {
+      "profile": {"citizen_id": "cit_arun_tn", "state": "Tamil Nadu", "district": "Madurai", "category": "SC", "course_level": "Diploma", "preferred_language": "ta-IN"},
+      "vault": {"mobile": "9999000202", "email": "arun.test@example.com", "bank_account": "60200098765432"},
+      "inputs": {
+        "scholarship_postmatric": {"full_name": "Arun Selvam", "dob": "2005-11-02", "gender": "Male", "state": "Tamil Nadu", "district": "Madurai", "category": "SC", "course_level": "Diploma", "institution": "Government Polytechnic College, Madurai", "annual_income": "95000", "ifsc": "IOBA0000456"},
+        "public_grievance": {"ministry": "Ministry of Road Transport and Highways", "department": "Road Safety", "category": "Road and Bridges", "state": "Tamil Nadu", "district": "Madurai", "subject": "Large pothole on the bypass road near the bus stand", "description": "There is a large pothole on the bypass road near the central bus stand. Two-wheelers have fallen at night. Please fill it and add a warning sign."}
+      }
+    },
+    {
+      "profile": {"citizen_id": "cit_rina_wb", "state": "West Bengal", "district": "Howrah", "category": "General", "course_level": "Class 12", "preferred_language": "bn-IN"},
+      "vault": {"mobile": "9999000303", "email": "rina.test@example.com", "bank_account": "30300011223344"},
+      "inputs": {
+        "scholarship_postmatric": {"full_name": "Rina Das", "dob": "2008-07-21", "gender": "Female", "state": "West Bengal", "district": "Howrah", "category": "EWS", "course_level": "Class 12", "institution": "Howrah Girls High School", "annual_income": "120000", "ifsc": "SBIN0000001"},
+        "public_grievance": {"ministry": "Ministry of Environment, Forest and Climate Change", "department": "Pollution Control", "category": "Pollution", "state": "West Bengal", "district": "Howrah", "subject": "Garbage burning every night near the school", "description": "Garbage is burnt every night on the empty plot next to the girls' high school. The smoke enters classrooms the next morning. Please stop the burning and clear the plot."}
+      }
+    }
+  ]
+}
