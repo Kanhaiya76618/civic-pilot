@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-display: "Mukta", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* Tricolor, tuned so text on white meets WCAG AA where used for text (the -700 shades). */
+  --color-saffron-50: #fff7ed;
+  --color-saffron-100: #ffead1;
+  --color-saffron-200: #ffd3a3;
+  --color-saffron-400: #ffab52;
+  --color-saffron-500: #ff9933;
+  --color-saffron-600: #e8790f;
+  --color-saffron-700: #a85200;
+  --color-leaf-50: #eef8ec;
+  --color-leaf-100: #d7efd2;
+  --color-leaf-200: #b0dfa6;
+  --color-leaf-500: #138808;
+  --color-leaf-600: #0f7206;
+  --color-leaf-700: #0b5905;
+  --color-navy-50: #eef2fb;
+  --color-navy-100: #dce4f6;
+  --color-navy-200: #b9c8ec;
+  --color-navy-400: #5b78c4;
+  --color-navy-500: #2747a0;
+  --color-navy-600: #1c3785;
+  --color-navy-700: #13306b;
+  --color-navy-800: #0e2452;
+  --color-navy-900: #0a1a3d;
+  --color-paper: #fffdf8;
+
+  /* Agent room (dark) */
+  --color-night-950: #060a16;
+  --color-night-900: #0a1022;
+  --color-night-800: #10182f;
+  --color-night-700: #17213d;
+  --color-night-600: #222f55;
+  --color-night-400: #8a9ac4;
+
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply font-sans text-slate-900 antialiased;
+    background-color: var(--color-paper);
+  }
+  h1, h2, h3, h4 { @apply font-display tracking-tight; }
+  :focus-visible { outline: 3px solid var(--color-saffron-500); outline-offset: 2px; border-radius: 6px; }
+  button, a, [role="button"] { cursor: pointer; touch-action: manipulation; }
+}
+
+/* Citizen pages: warm paper, soft tricolor light, faint original lattice ("jali") pattern. */
+@utility bg-civic {
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(60rem 30rem at -10% -10%, rgb(255 153 51 / 0.16), transparent 60%),
+    radial-gradient(50rem 30rem at 110% 30%, rgb(19 136 8 / 0.10), transparent 60%),
+    radial-gradient(40rem 26rem at 50% 110%, rgb(39 71 160 / 0.08), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='%2313306B' stroke-opacity='.05' stroke-width='1'%3E%3Cpath d='M24 4 44 24 24 44 4 24z'/%3E%3Ccircle cx='24' cy='24' r='6'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+@utility bg-night {
+  background-color: var(--color-night-950);
+  background-image:
+    radial-gradient(50rem 24rem at 0% 0%, rgb(255 153 51 / 0.10), transparent 60%),
+    radial-gradient(50rem 24rem at 100% 100%, rgb(19 136 8 / 0.10), transparent 60%),
+    radial-gradient(rgb(138 154 196 / 0.08) 1px, transparent 1px);
+  background-size: auto, auto, 22px 22px;
+}
+
+@utility glass {
+  background: rgb(255 255 255 / 0.66);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgb(255 255 255 / 0.75);
+  box-shadow: 0 10px 30px -10px rgb(19 48 107 / 0.18);
+}
+
+@utility glass-dark {
+  background: rgb(16 24 47 / 0.70);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: 0 20px 40px -20px rgb(0 0 0 / 0.6);
+}
+
+/* Claymorphism: soft, puffy surfaces for tiles people tap. */
+@utility clay {
+  border-radius: 1.75rem;
+  box-shadow:
+    12px 12px 28px -6px rgb(19 48 107 / 0.16),
+    -10px -10px 24px -8px rgb(255 255 255 / 0.95),
+    inset 3px 3px 8px rgb(255 255 255 / 0.75),
+    inset -4px -4px 10px rgb(19 48 107 / 0.07);
+}
+
+@utility tricolor-bar {
+  background: linear-gradient(90deg, var(--color-saffron-500) 0 33.3%, #ffffff 33.3% 66.6%, var(--color-leaf-500) 66.6% 100%);
+}
+
+@utility shimmer {
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgb(255 153 51 / 0.55); }
+  70% { box-shadow: 0 0 0 10px rgb(255 153 51 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(255 153 51 / 0); }
+}
+@utility pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* Leaflet needs its own CSS; keep the map's controls on-brand. */
+/* isolation keeps Leaflet's internal z-indexes (400+) below the sticky header. */
+.leaflet-container { font-family: var(--font-sans); border-radius: 1rem; isolation: isolate; z-index: 0; }

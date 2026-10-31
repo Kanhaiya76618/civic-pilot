@@ -4,14 +4,37 @@
     {
       "name": "sandbox-portal",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "uvicorn", "sandbox_portal.app:app", "--port", "8100"],
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "sandbox_portal.app:app",
+        "--port",
+        "8100"
+      ],
       "port": 8100
     },
     {
       "name": "executor",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "uvicorn", "executor.api:app", "--port", "8000"],
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "executor.api:app",
+        "--port",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "web",
+        "run",
+        "dev"
+      ],
+      "port": 5173
     }
   ]
 }
