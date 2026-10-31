@@ -9,3 +9,5 @@ __pycache__/
 reports/*.json
 registry/*/patches/
 registry/*/drafts/
+web/node_modules/
+web/dist/

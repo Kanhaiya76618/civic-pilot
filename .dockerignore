@@ -13,3 +13,5 @@ scripts
 .env
 .env.*
 !.env.example
+web/node_modules
+web/dist
