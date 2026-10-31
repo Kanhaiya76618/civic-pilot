@@ -112,12 +112,8 @@ class CivicVisionTriageEngine:
 
         return cracks[:5]
 
-    def analyze_image(self, image_path: str, category_hint: str = "road") -> Dict[str, Any]:
-        """Runs two-gate vision triage with multi-hazard detection."""
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image not found at {image_path}")
-
-        img_bgr = cv2.imread(image_path)
+    def analyze_frame_bgr(self, img_bgr: np.ndarray, frame_name: str = "frame.jpg", output_dir: str = None, category_hint: str = "road") -> Dict[str, Any]:
+        """Runs two-gate vision triage on an in-memory BGR frame."""
         h, w, _ = img_bgr.shape
         total_pixels = h * w
 
@@ -126,16 +122,17 @@ class CivicVisionTriageEngine:
         # =====================================================================
         relevance = self.check_civic_relevance(img_bgr)
         if not relevance["is_valid_civic"]:
-            annotated = img_bgr.copy()
-            cv2.rectangle(annotated, (0, 0), (w, 42), (0, 0, 180), -1)
-            cv2.putText(annotated, "REJECTED: NON-CIVIC CONTENT DETECTED", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-            cv2.putText(annotated, f"SPAM: {relevance['rejection_category'].upper()}", (int(w*0.05), int(h*0.5)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-            output_path = os.path.join(os.path.dirname(image_path), f"triage_annotated_{os.path.basename(image_path)}")
-            cv2.imwrite(output_path, annotated)
+            output_path = None
+            if output_dir:
+                annotated = img_bgr.copy()
+                cv2.rectangle(annotated, (0, 0), (w, 42), (0, 0, 180), -1)
+                cv2.putText(annotated, "REJECTED: NON-CIVIC CONTENT DETECTED", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+                cv2.putText(annotated, f"SPAM: {relevance['rejection_category'].upper()}", (int(w*0.05), int(h*0.5)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                output_path = os.path.join(output_dir, f"triage_annotated_{frame_name}")
+                cv2.imwrite(output_path, annotated)
 
             return {
-                "image_filename": os.path.basename(image_path),
+                "image_filename": frame_name,
                 "annotated_image_path": output_path,
                 "status": "REJECTED_AS_SPAM",
                 "is_valid_civic_infrastructure": False,
@@ -191,16 +188,7 @@ class CivicVisionTriageEngine:
             sla_hours = 0
             hud_msg = "HEALTHY INFRASTRUCTURE: NO DEFECTS"
         else:
-            # Base weighting
-            if has_structural_crack:
-                base = 65  # Structural failure of a bridge or foundation is an immediate life-safety hazard
-            elif "bridge" in category_hint.lower():
-                base = 55
-            elif has_pothole:
-                base = 40
-            else:
-                base = 35
-
+            base = 65 if has_structural_crack else (55 if "bridge" in category_hint.lower() else (40 if has_pothole else 35))
             count_factor = min(20, len(detected_defects) * 8)
             area_factor = min(20, int(coverage_pct * 2))
             severity_score = min(99, max(25, base + count_factor + area_factor))
@@ -208,7 +196,7 @@ class CivicVisionTriageEngine:
             if severity_score >= 80:
                 severity_level = "CRITICAL (STRUCTURAL HAZARD)" if has_structural_crack else "CRITICAL"
                 hud_color = (0, 0, 255)
-                sla_hours = 2 if has_structural_crack else 4  # 2 hours for bridge collapse risk!
+                sla_hours = 2 if has_structural_crack else 4
             elif severity_score >= 60:
                 severity_level = "HIGH"
                 hud_color = (0, 140, 255)
@@ -224,23 +212,23 @@ class CivicVisionTriageEngine:
 
             hud_msg = f"AI SEVERITY: {severity_score}/100 [{severity_level}] | SLA: {sla_hours}h | DEFECTS: {len(detected_defects)}"
 
-        # Draw HUD Bounding Boxes
-        annotated = img_bgr.copy()
-        for defect in detected_defects:
-            x1, y1, x2, y2 = defect["bbox"]
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), hud_color, 2)
-            tag = f"{defect['label']} ({defect['confidence']})"
-            cv2.putText(annotated, tag, (x1, max(18, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, hud_color, 1)
+        # Draw HUD Bounding Boxes if output_dir specified
+        output_path = None
+        if output_dir:
+            annotated = img_bgr.copy()
+            for defect in detected_defects:
+                x1, y1, x2, y2 = defect["bbox"]
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), hud_color, 2)
+                tag = f"{defect['label']} ({defect['confidence']})"
+                cv2.putText(annotated, tag, (x1, max(18, y1 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, hud_color, 1)
 
-        # Header HUD Bar
-        cv2.rectangle(annotated, (0, 0), (w, 36), (20, 20, 20), -1)
-        cv2.putText(annotated, hud_msg, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1)
-
-        output_path = os.path.join(os.path.dirname(image_path), f"triage_annotated_{os.path.basename(image_path)}")
-        cv2.imwrite(output_path, annotated)
+            cv2.rectangle(annotated, (0, 0), (w, 36), (20, 20, 20), -1)
+            cv2.putText(annotated, hud_msg, (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1)
+            output_path = os.path.join(output_dir, f"triage_annotated_{frame_name}")
+            cv2.imwrite(output_path, annotated)
 
         return {
-            "image_filename": os.path.basename(image_path),
+            "image_filename": frame_name,
             "annotated_image_path": output_path,
             "status": "TRIAGED_AND_DISPATCHED",
             "is_valid_civic_infrastructure": True,
@@ -252,6 +240,19 @@ class CivicVisionTriageEngine:
             "recommended_sla_hours": sla_hours,
             "detected_defects": detected_defects
         }
+
+    def analyze_image(self, image_path: str, category_hint: str = "road") -> Dict[str, Any]:
+        """Runs two-gate vision triage with multi-hazard detection."""
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image not found at {image_path}")
+
+        img_bgr = cv2.imread(image_path)
+        return self.analyze_frame_bgr(
+            img_bgr=img_bgr,
+            frame_name=os.path.basename(image_path),
+            output_dir=os.path.dirname(image_path),
+            category_hint=category_hint
+        )
 
 if __name__ == "__main__":
     engine = CivicVisionTriageEngine()

@@ -81,6 +81,7 @@
 | **Gate 1: Anti-Spam** | `yolov8n-cls.pt` | Ultralytics ImageNet-1k Classifier | Filters non-civic out-of-distribution uploads (food, animals, memes) |
 | **Gate 2A: Potholes** | `pothole_best.pt` | YOLOv8 Object Detection (22.5 MB) | Localizes asphalt craters; calibrated confidence cutoff: `conf=0.38` |
 | **Gate 2B: Structural Cracks** | Bilateral Top-Hat Morphology | Pure OpenCV Pipeline | Detects concrete fissures (`d=5, sigmaColor=30`, `aspect_ratio > 1.8`, `thinness > 14`) |
+| **Video Keyframe Triage** | Laplacian Motion Filter + YOLOv8 | OpenCV + PyAV Stream Pipeline | Samples keyframes (1–2 fps), filters motion blur, tracks hazard timeline, pinpoints peak frame |
 | **Gate 3: Speech ASR** | `openai/whisper-tiny` | PyTorch Transformers (39M params) | Universal offline audio transcription to 16kHz float32 mono |
 | **Gate 3: Intent NLP** | Rule-Based Lexicon Classifier | `CIVIC_CATEGORIES` & indicators | Maps distress keywords to responsible municipal agencies and base severities |
 | **Gate 4: GIS Boundaries** | Shapely Ray-Casting PIP | Vector MultiPolygons (GeoJSON) | Point-in-Polygon administrative ward and nodal engineer assignment |
@@ -111,15 +112,20 @@
 * **Resolution**: Any resolution (automatically resized to $640\times640$ maintaining aspect ratio for neural inference).
 * **Metadata**: Optional EXIF geotagging (`GPSLatitude`, `GPSLongitude`) extracted if present.
 
-### 2. Audio Evidence (`audio`)
+### 2. Video Evidence (`video`)
+* **Supported Formats**: MP4 (`.mp4`), QuickTime MOV (`.mov`), AVI (`.avi`), WEBM (`.webm`), Matroska (`.mkv`).
+* **Frame Extraction**: Sampled at 1–2 fps with OpenCV / PyAV; frames filtered for camera motion blur via Laplacian variance ($\sigma^2 \ge 25.0$).
+* **Embedded Audio**: Audio stream automatically demuxed and transcribed via Whisper ASR for spoken distress commentary.
+
+### 3. Audio Evidence (`audio`)
 * **Supported Formats**: MP3 (`.mp3`), WAV (`.wav`), M4A (`.m4a`), AAC (`.aac`), OGG (`.ogg`).
 * **Decoding**: PyAV decodes in-memory to 16,000 Hz, 1-channel (mono), 32-bit floating-point arrays.
 
-### 3. Written Complaint Statement (`complaint_text`)
+### 4. Written Complaint Statement (`complaint_text`)
 * **Supported Formats**: Natural language UTF-8 string.
 * **Example**: `"Huge crater pothole outside the school gate causing two-wheeler accidents."`
 
-### 4. Geolocation (`lat`, `lon`)
+### 5. Geolocation (`lat`, `lon`)
 * **Format**: WGS84 Decimal Degrees (`float`).
 * **Latitude Range**: $-90.0$ to $+90.0$.
 * **Longitude Range**: $-180.0$ to $+180.0$.
@@ -129,7 +135,37 @@
 
 ## 📤 6. Output Formats & Schemas
 
-### A. Vision Perception Output (`src/vision_triage.py`)
+### A. Video Evidence Triage Output (`src/video_triage.py`)
+```json
+{
+  "video_filename": "video_road_potholes_driveby.mp4",
+  "duration_seconds": 4.0,
+  "fps": 15.0,
+  "total_frames_in_file": 60,
+  "sampled_frames_count": 9,
+  "status": "TRIAGED_AND_DISPATCHED",
+  "is_valid_civic_infrastructure": true,
+  "peak_severity_score": 99,
+  "peak_timestamp_seconds": 0.0,
+  "peak_timestamp_str": "00:00.0",
+  "annotated_peak_frame_path": "data/ai_datasets/video_samples/triage_annotated_video_road_potholes_driveby_peak.jpg",
+  "aggregate_defect_count": 40,
+  "continuous_hazard_stretch": true,
+  "recommended_sla_hours": 2,
+  "detected_defects": [
+    {
+      "label": "Structural Concrete Crack",
+      "confidence": 0.95,
+      "bbox": [0, 88, 279, 218],
+      "area_pct": 11.81,
+      "fissure_length_px": 844.9
+    }
+  ],
+  "audio_commentary": null
+}
+```
+
+### B. Vision Perception Output (`src/vision_triage.py`)
 ```json
 {
   "image_filename": "road_damage_01.jpg",

@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 from vision_triage import CivicVisionTriageEngine
 from audio_triage import CivicAudioTriageEngine
 from gis_routing import CivicGISRouter
+from video_triage import CivicVideoTriageEngine
 
 st.set_page_config(
     page_title="Transparent Civic AI Triage",
@@ -57,9 +58,14 @@ def get_audio_engine():
 def get_gis_router():
     return CivicGISRouter()
 
+@st.cache_resource
+def get_video_engine():
+    return CivicVideoTriageEngine(vision_engine=get_vision_engine(), audio_engine=get_audio_engine())
+
 vision_engine = get_vision_engine()
 audio_engine = get_audio_engine()
 gis_router = get_gis_router()
+video_engine = get_video_engine()
 
 # Declare Custom Draggable Map Component (Local Leaflet with Drag & Drop Pin)
 COMPONENT_PATH = os.path.join(os.path.dirname(__file__), "static", "draggable_pin_map")
@@ -68,6 +74,7 @@ draggable_map_component = components.declare_component("draggable_pin_map", path
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "ai_datasets", "vision_damage"))
 DATASET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "anant_dataset", "My Dataset"))
 AUDIO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "ai_datasets", "audio_samples"))
+VIDEO_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "ai_datasets", "video_samples"))
 LEDGER_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "grievance_ledger.json"))
 
 def load_ledger():
@@ -112,13 +119,16 @@ with tab_report:
         key="citizen_complaint_desc"
     )
 
-    c_opt1, c_opt2 = st.columns(2)
+    c_opt1, c_opt2, c_opt3 = st.columns(3)
     with c_opt1:
         has_image = st.checkbox("📸 Include Photo Evidence", value=True)
     with c_opt2:
-        has_audio = st.checkbox("🎙️ Include Voice Note / Audio Complaint", value=True)
+        has_video = st.checkbox("🎥 Include Video Evidence", value=False)
+    with c_opt3:
+        has_audio = st.checkbox("🎙️ Include Voice Note / Audio Call", value=False)
 
     target_image_path = None
+    target_video_path = None
     target_audio_path = None
 
     # Image Ingestion Row
@@ -153,6 +163,34 @@ with tab_report:
             s_files = [f for f in os.listdir(DATA_DIR) if f.endswith((".jpg", ".png")) and "triage_annotated" not in f and not f.startswith("user_upload_")]
             if s_files:
                 target_image_path = os.path.join(DATA_DIR, st.selectbox("Select Sample Civic Photo:", s_files, key="preloaded_u"))
+
+    # Video Ingestion Row (Drive-by / Walking Inspection)
+    if has_video:
+        st.write("")
+        st.markdown("##### 🎥 Video Evidence Ingestion (Drive-By / Walking Frame-by-Frame Inspection)")
+        vid_source = st.radio(
+            "How to provide the video clip:",
+            ["📤 Upload Custom Video (MP4/MOV/AVI/WEBM)", "📁 Pre-Loaded Drive-By Inspection Clips"],
+            horizontal=True,
+            key="vid_source_unified"
+        )
+        if vid_source == "📤 Upload Custom Video (MP4/MOV/AVI/WEBM)":
+            u_vid = st.file_uploader("Upload Video Evidence (5–15 sec):", type=["mp4", "mov", "avi", "webm", "mkv"], key="u_vid_unified")
+            if u_vid is not None:
+                save_vp = os.path.join(VIDEO_DIR, f"user_vid_{u_vid.name}")
+                with open(save_vp, "wb") as f:
+                    f.write(u_vid.getbuffer())
+                target_video_path = save_vp
+                st.video(u_vid)
+        else:
+            sample_videos = {
+                "video_road_potholes_driveby.mp4": "🛣️ Road Drive-By: Continuous Asphalt Pothole Cluster (4s)",
+                "video_bridge_pier_crack_inspection.mp4": "🌉 Structural Inspection: Concrete Pier & Beam Shear Crack Pan (4s)"
+            }
+            c_vid = st.selectbox("Choose Drive-By Scenario:", list(sample_videos.keys()), format_func=lambda x: sample_videos[x], key="vid_choice_u")
+            target_video_path = os.path.join(VIDEO_DIR, c_vid)
+            if os.path.exists(target_video_path):
+                st.video(target_video_path)
 
     # Audio Ingestion Row
     if has_audio:
@@ -261,22 +299,29 @@ with tab_report:
 
     if submit_btn:
         if cur_lat is None or cur_lon is None:
-            st.error("Please allow GPS location access or toggle the map to pin your incident location before submitting.")
-        elif not target_image_path and not target_audio_path and not complaint_text.strip():
-            st.error("Please provide at least one form of evidence (Written Complaint, Photo, or Voice Note).")
+            st.error("Please allow GPS location access or click on the map to pin your incident location before submitting.")
+        elif not target_image_path and not target_video_path and not target_audio_path and not complaint_text.strip():
+            st.error("Please provide at least one form of evidence (Photo, Video, Voice Note, or Written Complaint).")
         else:
-            with st.spinner("Executing Unified Pipeline: Vision Gates ➔ Whisper ASR ➔ Ward PIP ➔ Deduplication..."):
+            with st.spinner("Executing Unified Pipeline: Vision/Video Gates ➔ Whisper ASR ➔ Ward PIP ➔ Deduplication..."):
                 vision_res = None
+                video_res = None
                 audio_res = None
 
-                # Process Vision
+                # Process Photo
                 if target_image_path and os.path.exists(target_image_path):
                     vision_res = vision_engine.analyze_image(target_image_path)
+
+                # Process Video (Frame-by-Frame Keyframe Triage)
+                if target_video_path and os.path.exists(target_video_path):
+                    video_res = video_engine.analyze_video(target_video_path)
+                    if video_res.get("audio_commentary") and not audio_res:
+                        audio_res = video_res["audio_commentary"]
 
                 # Process Audio or Written Text
                 if target_audio_path and os.path.exists(target_audio_path):
                     audio_res = audio_engine.analyze_audio_report(target_audio_path)
-                elif complaint_text.strip():
+                elif complaint_text.strip() and not audio_res:
                     audio_res = audio_engine.analyze_text_report(complaint_text.strip())
 
                 # Process GIS
@@ -284,14 +329,23 @@ with tab_report:
                 dup_res = gis_router.check_spatial_duplicate(cur_lat, cur_lon, "Civic Defect")
 
                 # =============================================================
-                # GATE 1 SPAM CHECK (If photo submitted)
+                # GATE 1 SPAM CHECK (If photo or video submitted)
                 # =============================================================
+                is_spam = False
+                spam_reason = ""
                 if vision_res and not vision_res.get("is_valid_civic_infrastructure", True):
+                    is_spam = True
+                    spam_reason = vision_res["rejection_reason"]
+                elif video_res and not video_res.get("is_valid_civic_infrastructure", True):
+                    is_spam = True
+                    spam_reason = video_res["rejection_reason"]
+
+                if is_spam:
                     st.markdown(f"""
                     <div class="rejection-box">
                         <h3>🚫 Report Rejected: Non-Civic Content Detected</h3>
-                        <b>Gate-1 Relevance Filter:</b> Photo failed validation.<br>
-                        <b>Reason:</b> {vision_res['rejection_reason']}<br><br>
+                        <b>Gate-1 Relevance Filter:</b> Uploaded visual media failed validation.<br>
+                        <b>Reason:</b> {spam_reason}<br><br>
                         <i>No municipal crew or public work order will be created for non-infrastructure imagery.</i>
                     </div>
                     """, unsafe_allow_html=True)
@@ -299,6 +353,7 @@ with tab_report:
                     # Severity & SLA Synthesis
                     scores = []
                     if vision_res: scores.append(vision_res["severity_score"])
+                    if video_res: scores.append(video_res["peak_severity_score"])
                     if audio_res: scores.append(audio_res["severity_score"])
                     final_score = max(scores) if scores else 50
 
@@ -326,7 +381,7 @@ with tab_report:
                     # Primary Department Selection
                     if audio_res:
                         dept = audio_res["primary_department"]
-                    elif vision_res and any("crack" in str(d).lower() for d in vision_res.get("detected_defects", [])):
+                    elif (vision_res and any("crack" in str(d).lower() for d in vision_res.get("detected_defects", []))) or (video_res and any("crack" in str(d).lower() for d in video_res.get("detected_defects", []))):
                         dept = "Structural Engineering & Bridges Wing"
                     else:
                         dept = "Public Works Department (PWD / BBMP Roads)"
@@ -361,12 +416,16 @@ with tab_report:
                     col_hud, col_speech = st.columns([1, 1], gap="medium")
 
                     with col_hud:
-                        st.markdown("**📸 Visual Defect Localizations (HUD):**")
-                        if vision_res and os.path.exists(vision_res.get("annotated_image_path", "")):
+                        if video_res and video_res.get("annotated_peak_frame_path") and os.path.exists(video_res["annotated_peak_frame_path"]):
+                            st.markdown(f"**🎥 Video Keyframe Evidence (Worst Defect at `{video_res['peak_timestamp_str']}`):**")
+                            st.image(Image.open(video_res["annotated_peak_frame_path"]), caption=f"Peak Defect Keyframe HUD (Score: {video_res['peak_severity_score']}/100)", width="stretch")
+                            st.caption(f"Total Defects Across Video Stretch: {video_res['aggregate_defect_count']} | Sampled Frames: {video_res['sampled_frames_count']} | Continuous Hazard: {'🚨 YES' if video_res['continuous_hazard_stretch'] else 'NO'}")
+                        elif vision_res and os.path.exists(vision_res.get("annotated_image_path", "")):
+                            st.markdown("**📸 Visual Defect Localizations (HUD):**")
                             st.image(Image.open(vision_res["annotated_image_path"]), caption="Triage HUD", width="stretch")
                             st.caption(f"Defects Identified: {vision_res['defect_count']} | Area Impacted: {vision_res['damage_surface_coverage_pct']}%")
                         else:
-                            st.info("No photo attached for this report.")
+                            st.info("No photo or video attached for this report.")
 
                     with col_speech:
                         st.markdown("**🎙️ Voice Note / Written Grievance:**")
@@ -387,11 +446,12 @@ with tab_report:
                     # Save to Public Ledger DB if new
                     if not dup_res["is_duplicate"]:
                         existing_ledger = load_ledger()
+                        before_img_ref = os.path.basename(video_res["annotated_peak_frame_path"]) if (video_res and video_res.get("annotated_peak_frame_path")) else (os.path.basename(target_image_path) if target_image_path else "images (1).jpg")
                         new_record = {
                             "ticket_id": new_ticket_id,
                             "title": f"Incident in {ward_res['ward_name']}",
                             "description": complaint_text.strip() if complaint_text.strip() else (audio_res["transcript"] if audio_res else f"Incident in {ward_res['ward_name']}"),
-                            "category": audio_res["category"] if audio_res else "ROADS_AND_PAVEMENTS",
+                            "category": audio_res["category"] if audio_res else ("ROADS_AND_PAVEMENTS" if not (video_res and any("crack" in str(d).lower() for d in video_res.get("detected_defects", []))) else "STRUCTURAL_HAZARDS"),
                             "ward_name": ward_res["ward_name"],
                             "ward_no": ward_res["ward_number"],
                             "engineer": ward_res["executive_engineer_in_charge"],
@@ -402,7 +462,8 @@ with tab_report:
                             "reported_at": "Just now (Live)",
                             "sla_target": f"{sla_h} Hours",
                             "resolved_in": "Active countdown",
-                            "before_image": os.path.basename(target_image_path) if target_image_path else "images (1).jpg",
+                            "before_image": before_img_ref,
+                            "video_evidence": os.path.basename(target_video_path) if target_video_path else None,
                             "after_image": None,
                             "disputed": False,
                             "dispute_count": 0
