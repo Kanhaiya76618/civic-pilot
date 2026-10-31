@@ -1,61 +1,139 @@
-# 🏛️ CivicPilot: Part 2 — Autonomous Multimodal Vision, Audio & GIS Triage Engine (`2-CV`)
+# 🏛️ CivicPilot: Autonomous Multimodal Vision, Audio & GIS Triage Engine (`2-CV`)
 
-> **Developer & Agent Specification Document**  
-> *Designed for human software engineers and autonomous AI coding agents (Antigravity, Cursor, Claude Code, Devin) to enable seamless backend integration, contract compliance, and execution agent interoperability.*
-
----
-
-## 🧭 Executive Architecture & Subsystem Boundary
-
-`2-CV` represents the **Perception, Verification & Autonomous Triage Subsystem** of the CivicPilot platform. It ingests unvetted citizen reports (imagery, audio recordings, GPS points), runs multi-gate neural perception, performs geometric GIS validation, enforces statutory response SLAs, and outputs tamper-evident JSON work orders for downstream execution engines (e.g., `part3-execution-agent`).
-
-```
-[Citizen Inputs]
-  ├── Photo (JPEG/PNG)  ──────► Gate 1: Spam / OOD Filter (ImageNet Classifier)
-  │                                    │ Passed
-  │                                    ▼
-  │                             Gate 2: Damage Quantifier (YOLOv8 + Fissure CV)
-  │                                    │
-  ├── Voice Note (Audio) ─────► Gate 3: Whisper ASR + Distress NLP Classifier
-  │                                    │
-  └── GPS (Lat, Lon)    ──────► Gate 4: Shapely Vector PIP + 50m Spatial Deduplicator
-                                       │
-                                       ▼
-                       [Unified Triage Engine Synthesis]
-                                       │
-                   ┌───────────────────┴───────────────────┐
-                   ▼                                       ▼
-       Autonomous Severity (0–100)           Deterministic Department Routing
-       Enforced SLA (2h / 24h / 72h)         Nodal Engineer Liable (Ward Level)
-                   │                                       │
-                   └───────────────────┬───────────────────┘
-                                       ▼
-                   [Immutable Public Ledger Payload (JSON)]
-                                       │
-                                       ▼
-               Downstream Execution (e.g., part3-execution-agent)
-```
+> **Comprehensive Developer, AI Agent & API Specification Document**  
+> *Engineered for human engineers and autonomous AI coding agents (Antigravity, Cursor, Claude Code, Devin) for end-to-end perception, validation, municipal routing, and backend integration.*
 
 ---
 
-## 📦 Core Python APIs & Contracts
+## 🧭 1. System Overview & Architecture
 
-Downstream backend services or agents can import the triage engines directly as modular Python classes:
+`2-CV` is an open-source, AI-driven **Transparent Civic Grievance & Infrastructure Triage Engine**. It autonomously ingests raw citizen inputs (photos, voice notes, written statements, real-time GPS coordinates), filters spam, quantifies structural damage, performs geospatial point-in-polygon resolution, detects duplicate claims to block contractor fraud, and enforces legally binding response SLAs.
 
-### 1. Vision Perception Engine (`src/vision_triage.py`)
-
-```python
-from src.vision_triage import CivicVisionTriageEngine
-
-engine = CivicVisionTriageEngine(pothole_weights="pothole_best.pt")
-result = engine.analyze_image("path/to/damage.jpg", category_hint="road")
+```
+                              [CITIZEN MULTIMODAL INPUTS]
+         ┌───────────────────────────────┼───────────────────────────────┐
+         ▼                               ▼                               ▼
+  📸 Damage Photo                 🎙️ Voice Audio / Text           📍 Real-Time GPS
+(JPEG/PNG, Camera/Upload)         (MP3/WAV/M4A, Speech/Text)     (Browser Chip / Drag Pin)
+         │                               │                               │
+         ▼                               ▼                               ▼
+  [GATE 1: SPAM FILTER]           [GATE 3: SPEECH NLP]           [GATE 4: VECTOR GIS]
+  YOLOv8-Cls (ImageNet)          Whisper-Tiny + Lexicons         Shapely PIP (243 Wards)
+  Rejects food/pets/memes        Extracts Intent & Distress      50m Haversine Deduplicator
+         │ Passed                        │                               │
+         ▼                               ▼                               ▼
+  [GATE 2: DAMAGE QUANTIFIER]     [DEPARTMENTAL ROUTING]          [OFFICIAL & POI RESOLUTION]
+  • YOLOv8 Pothole (conf=0.38)    PWD Roads / Bridges /           Identifies Zonal Engineer &
+  • Bilateral Crack Morphology    BWSSB Water / Health SWM        Schools/Hospitals Multiplier
+         │                               │                               │
+         └───────────────────────────────┼───────────────────────────────┘
+                                         ▼
+                     [AUTONOMOUS TRIAGE SYNTHESIS ENGINE]
+                         • Unified Severity Score (0–100)
+                         • Statutory SLA (2h / 24h / 72h / 168h)
+                         • Fraud / Duplicate Billing Prevention
+                                         │
+                                         ▼
+                     [IMMUTABLE PUBLIC ACCOUNTABILITY LEDGER]
+                         • Before vs. After Photographic Proof
+                         • Citizen Dispute & Penalty Escalation Mechanism
 ```
 
-#### Output Contract (`dict`):
+---
+
+## ✨ 2. Complete Features List
+
+### A. Citizen Ingestion & Evidence Capture
+* **Multimodal Ingestion**: Supports photo evidence, audio helpline recordings, written complaints, or any combination.
+* **Smart Dataset Benchmark Explorer**: Integrated explorer for the 712-image benchmark dataset (Anant Singh Potholes & Plain Roads) and preloaded real-world municipal samples.
+* **Written Statement NLP**: Citizens can type natural language statements with automatic entity and emergency intent extraction.
+
+### B. Real-Time Geolocation & Interactive Map
+* **Zero Dummy / Prefilled Data**: Does not assume or prefill fake coordinates or fake wards.
+* **Hardware GPS Auto-Acquisition**: Browser queries `navigator.geolocation.getCurrentPosition()` with high-accuracy mode on page load.
+* **Always-Visible Leaflet Map**: Standalone interactive street map powered by OpenStreetMap (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) with **zero API keys required**.
+* **True Drag-and-Drop Pin**: Citizens can drag the red SVG pin or click anywhere on the street to pinpoint defects with sub-meter precision.
+* **"🎯 My Current GPS" Button**: Instant one-click re-centering to live hardware coordinates.
+* **Client-Side Reverse Geocoding**: Queries OpenStreetMap Nominatim directly in the browser to resolve real locality, district, and municipal corporation names (e.g. *Hubballi-Dharwad Municipal Corporation (HDMC)*).
+
+### C. Automated Geospatial Triage & Deduplication
+* **Vector Point-in-Polygon (PIP)**: Shapely ray-casting resolves municipal boundaries across 243 Bangalore BBMP wards, Pune PMC wards, and dynamic urban jurisdictions in **$< 3\text{ ms}$**.
+* **50-Meter Spatial Deduplication**: Haversine distance clustering automatically merges duplicate citizen reports within 50m of an active issue, upvoting existing tickets and preventing duplicate contractor billing.
+* **Critical POI Proximity Escalation**: Automatically checks distance to critical infrastructure (trauma hospitals, school zones, metro stations within 500m) and applies priority boost multipliers ($1.2\times$ to $1.6\times$).
+
+### D. Multi-Gate AI Perception & Fraud Prevention
+* **Gate 1 Anti-Spam Gatekeeper**: Rejects non-civic imagery (pets, food, screenshots, memes) with 0 severity and a clear explanation.
+* **Gate 2A Pothole Detection**: Custom-calibrated YOLOv8 model localized to asphalt craters with surface coverage percentage.
+* **Gate 2B Structural Concrete Crack Analyzer**: Morphological black top-hat and bilateral filtering detects fine bridge, pier, and concrete cracks while rejecting shadow artifacts.
+* **Gate 3 Speech-to-Text & Urgency Extraction**: Offline Whisper speech transcription with keyword matching for immediate life-safety hazards.
+
+### E. Public Accountability & Repair Tracker
+* **Cryptographic Audit Ledger**: Every complaint is assigned a SHA-256 hash-backed Ticket ID (`CIV-2026-{WARD}-{HASH}`).
+* **Photographic Proof of Repair**: Displays Before vs. After repair images for public review.
+* **"🚨 Dispute Repair (Fake / Poor Fix)"**: Citizens can reject substandard or fabricated repairs, immediately re-opening the ticket, resetting the countdown SLA, and flagging the contractor for municipal audit.
+
+---
+
+## 🧠 3. Machine Learning Models & Computer Vision Algorithms
+
+| Subsystem | Model / Algorithm | Weight / Architecture | Primary Role |
+| :--- | :--- | :--- | :--- |
+| **Gate 1: Anti-Spam** | `yolov8n-cls.pt` | Ultralytics ImageNet-1k Classifier | Filters non-civic out-of-distribution uploads (food, animals, memes) |
+| **Gate 2A: Potholes** | `pothole_best.pt` | YOLOv8 Object Detection (22.5 MB) | Localizes asphalt craters; calibrated confidence cutoff: `conf=0.38` |
+| **Gate 2B: Structural Cracks** | Bilateral Top-Hat Morphology | Pure OpenCV Pipeline | Detects concrete fissures (`d=5, sigmaColor=30`, `aspect_ratio > 1.8`, `thinness > 14`) |
+| **Gate 3: Speech ASR** | `openai/whisper-tiny` | PyTorch Transformers (39M params) | Universal offline audio transcription to 16kHz float32 mono |
+| **Gate 3: Intent NLP** | Rule-Based Lexicon Classifier | `CIVIC_CATEGORIES` & indicators | Maps distress keywords to responsible municipal agencies and base severities |
+| **Gate 4: GIS Boundaries** | Shapely Ray-Casting PIP | Vector MultiPolygons (GeoJSON) | Point-in-Polygon administrative ward and nodal engineer assignment |
+
+---
+
+## 🔌 4. APIs & Libraries Used
+
+### External Web Services & APIs (Zero Commercial Keys Required)
+* **OpenStreetMap Tile Service**: `https://tile.openstreetmap.org/{z}/{x}/{y}.png` (Free, public, zero API key).
+* **OpenStreetMap Nominatim Reverse Geocoding**: `https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}` (Free, public client-side lookup).
+* **HTML5 Geolocation API**: `navigator.geolocation.getCurrentPosition()` (Direct device hardware GPS).
+
+### Core Python Libraries
+* **Neural Networks & Inference**: `torch`, `torchvision`, `transformers`, `ultralytics`.
+* **Audio Container Decoding**: `av` (PyAV) for in-memory audio decoding without FFmpeg binary installation.
+* **Computer Vision**: `opencv-python` (`cv2`), `numpy`, `Pillow` (`PIL`).
+* **Geospatial & Vector Math**: `shapely` (`Point`, `Polygon`, `MultiPolygon`).
+* **Interactive UI**: `streamlit` (v1.25+), `streamlit.components.v1`.
+* **Cryptography & Data Storage**: `hashlib`, `json`.
+
+---
+
+## 📥 5. Input Formats
+
+### 1. Photo Evidence (`image`)
+* **Supported Formats**: JPEG (`.jpg`, `.jpeg`), PNG (`.png`).
+* **Resolution**: Any resolution (automatically resized to $640\times640$ maintaining aspect ratio for neural inference).
+* **Metadata**: Optional EXIF geotagging (`GPSLatitude`, `GPSLongitude`) extracted if present.
+
+### 2. Audio Evidence (`audio`)
+* **Supported Formats**: MP3 (`.mp3`), WAV (`.wav`), M4A (`.m4a`), AAC (`.aac`), OGG (`.ogg`).
+* **Decoding**: PyAV decodes in-memory to 16,000 Hz, 1-channel (mono), 32-bit floating-point arrays.
+
+### 3. Written Complaint Statement (`complaint_text`)
+* **Supported Formats**: Natural language UTF-8 string.
+* **Example**: `"Huge crater pothole outside the school gate causing two-wheeler accidents."`
+
+### 4. Geolocation (`lat`, `lon`)
+* **Format**: WGS84 Decimal Degrees (`float`).
+* **Latitude Range**: $-90.0$ to $+90.0$.
+* **Longitude Range**: $-180.0$ to $+180.0$.
+* **Accuracy**: Rounded to 5 decimal places ($\approx 1.1\text{ m}$ accuracy on Earth).
+
+---
+
+## 📤 6. Output Formats & Schemas
+
+### A. Vision Perception Output (`src/vision_triage.py`)
 ```json
 {
-  "image_filename": "damage.jpg",
-  "annotated_image_path": "path/to/triage_annotated_damage.jpg",
+  "image_filename": "road_damage_01.jpg",
+  "annotated_image_path": "data/ai_datasets/vision_damage/triage_annotated_road_damage_01.jpg",
   "status": "TRIAGED_AND_DISPATCHED",
   "is_valid_civic_infrastructure": true,
   "category_hint": "road",
@@ -67,7 +145,7 @@ result = engine.analyze_image("path/to/damage.jpg", category_hint="road")
   "detected_defects": [
     {
       "label": "Pothole Crater",
-      "confidence": 0.386,
+      "confidence": 0.42,
       "bbox": [142, 155, 266, 198],
       "area_pct": 1.74
     },
@@ -82,26 +160,25 @@ result = engine.analyze_image("path/to/damage.jpg", category_hint="road")
 }
 ```
 
-* **Gate 1 Rejection Protocol**: If non-civic imagery is ingested (food, pets, memes), `is_valid_civic_infrastructure` returns `false`, `severity_score` is `0`, and `status` is `"REJECTED_AS_SPAM"`.
+*When Gate 1 rejects non-infrastructure imagery:*
+```json
+{
+  "image_filename": "burger.jpg",
+  "status": "REJECTED_AS_SPAM",
+  "is_valid_civic_infrastructure": false,
+  "severity_score": 0,
+  "rejection_reason": "Gate 1 rejected: 'cheeseburger' (confidence: 96.2%) is not civic infrastructure.",
+  "detected_defects": []
+}
+```
 
 ---
 
-### 2. Audio & Speech-to-Text Intent Engine (`src/audio_triage.py`)
-
-Uses PyAV for universal in-memory decoding (MP3/WAV/M4A/AAC/OGG) without system FFmpeg, running `openai/whisper-tiny` via PyTorch CPU.
-
-```python
-from src.audio_triage import CivicAudioTriageEngine
-
-audio_engine = CivicAudioTriageEngine()
-audio_result = audio_engine.analyze_audio_report("path/to/voice_note.mp3")
-```
-
-#### Output Contract (`dict`):
+### B. Audio & Text Intent Output (`src/audio_triage.py`)
 ```json
 {
-  "audio_filename": "voice_note.mp3",
-  "transcript": "A major underground water pipe has burst on 100 Feet Road... flooding the street.",
+  "audio_filename": "voice_call.mp3",
+  "transcript": "A major underground water pipe has burst on 100 Feet Road... flooding the entire junction.",
   "category": "WATER_AND_DRAINAGE",
   "severity_score": 85,
   "priority_label": "CRITICAL (LIFE-SAFETY HAZARD)",
@@ -118,103 +195,71 @@ audio_result = audio_engine.analyze_audio_report("path/to/voice_note.mp3")
 
 ---
 
-### 3. Geospatial Point-in-Polygon & Spatial Deduplication (`src/gis_routing.py`)
+### C. Geospatial PIP & Deduplication Output (`src/gis_routing.py`)
 
-Vector boundary indexing against **243 Bangalore BBMP Wards** and Pune PMC Wards with 50-meter Haversine proximity checks.
-
-```python
-from src.gis_routing import CivicGISRouter
-
-gis = CivicGISRouter()
-
-# 1. Point-in-Polygon Ward Resolution
-ward_info = gis.resolve_location(lat=12.9716, lon=77.6412)
-
-# 2. 50-Meter Proximity Deduplication
-dup_status = gis.check_spatial_duplicate(lat=12.9717, lon=77.6411, hazard_type="Pothole")
-```
-
-#### Ward Resolution Contract:
+#### Ward Resolution:
 ```json
 {
-  "latitude": 12.9716,
-  "longitude": 77.6412,
-  "city": "Bengaluru (BBMP)",
-  "ward_name": "Old Thippasandra",
-  "ward_number": "121",
-  "ward_id": 5118,
-  "executive_engineer_in_charge": "EE-Ward-121 (Old Thippasandra)",
+  "latitude": 15.39353,
+  "longitude": 75.02489,
+  "city": "Hubballi-Dharwad Municipal Corporation (HDMC)",
+  "ward_name": "Hubballi-Dharwad Urban Jurisdiction",
+  "ward_number": "HDMC-Live",
+  "ward_id": "GPS-15393",
+  "executive_engineer_in_charge": "AEE - Hubballi-Dharwad City Division",
   "control_room_hotline": "+91-80-2222-1188",
   "nearby_critical_pois": [],
   "poi_vulnerability_multiplier": 1.0
 }
 ```
 
-#### Deduplication Contract:
+#### 50m Spatial Deduplication:
 ```json
 {
   "is_duplicate": true,
   "action": "MERGE_AND_UPVOTE",
-  "matched_parent_ticket": "CIV-2026-ACTIVE-01",
-  "distance_meters": 15.5,
+  "matched_parent_ticket": "CIV-2026-121-7F83B165",
+  "distance_meters": 14.8,
   "cluster_status": "DISPATCHED_TO_CREW",
   "total_citizen_reports": 4,
-  "explanation": "Duplicate incident detected within 15.5m of active ticket #CIV-2026-ACTIVE-01. Auto-merged to prevent redundant contractor billing."
+  "explanation": "Duplicate incident detected within 14.8m of active ticket #CIV-2026-121-7F83B165. Auto-merged to prevent redundant contractor billing."
 }
 ```
 
 ---
 
-## 🔒 Unified Work Order Schema (For Downstream Agents)
+### D. Canonical Public Ledger Schema (`data/grievance_ledger.json`)
 
-When an incident is fully triaged, `src/app_demo.py` persists this canonical record to `data/grievance_ledger.json`. Downstream execution agents should consume this exact schema:
+The final, unified ticket persisted for public transparency and downstream execution agents:
 
 ```json
 {
-  "ticket_id": "CIV-2026-121-7F83B165",
-  "status": "DISPATCHED_TO_CONTRACTOR",
-  "modality": "MULTIMODAL_VISION_VOICE_GIS",
-  "severity_score": 92,
-  "sla_target": "2 Hours (Emergency)",
-  "enforced_sla_hours": 2,
-  "resolved_in": "Active countdown",
+  "ticket_id": "CIV-2026-HDMC-Live-93B41C02",
+  "title": "Incident in Hubballi-Dharwad Urban Jurisdiction",
+  "description": "Severe deep crater pothole near bus terminal causing accidents.",
   "category": "ROADS_AND_PAVEMENTS",
-  "primary_department": "Public Works Department (PWD / BBMP Roads)",
-  "secondary_department": "Traffic Police Infrastructure Wing",
-  "jurisdiction": {
-    "city": "Bengaluru (BBMP)",
-    "ward_name": "Old Thippasandra",
-    "ward_number": "121",
-    "executive_engineer": "EE-Ward-121 (Old Thippasandra)",
-    "hotline": "+91-80-2222-1188"
-  },
-  "coordinates": {
-    "latitude": 12.9716,
-    "longitude": 77.6412
-  },
-  "spatial_deduplication": {
-    "is_duplicate": false,
-    "action": "CREATE_NEW_WORK_ORDER",
-    "matched_parent_ticket": null,
-    "distance_meters": null,
-    "total_citizen_reports": 1
-  },
-  "proof_of_repair": {
-    "before_image": "damage_crater_01.jpg",
-    "after_image": null,
-    "contractor_verified_at": null,
-    "citizen_disputed": false,
-    "dispute_reason": null
-  },
-  "tamper_evident_audit_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "ward_name": "Hubballi-Dharwad Urban Jurisdiction",
+  "ward_no": "HDMC-Live",
+  "engineer": "AEE - Hubballi-Dharwad City Division",
+  "lat": 15.39353,
+  "lon": 75.02489,
+  "severity_score": 92,
+  "status": "DISPATCHED_TO_CONTRACTOR",
+  "reported_at": "Just now (Live)",
+  "sla_target": "2 Hours",
+  "resolved_in": "Active countdown",
+  "before_image": "damage_crater_01.jpg",
+  "after_image": null,
+  "disputed": false,
+  "dispute_count": 0
 }
 ```
 
 ---
 
-## 🌐 FastAPI Backend Integration Blueprint
+## 🚀 7. FastAPI Gateway Blueprint (For Backend Integration)
 
-For agents developing a centralized microservices backend or REST Gateway, wrap the subsystem as follows:
+Autonomous agents or backend microservices can expose this subsystem as a REST service:
 
 ```python
 from fastapi import FastAPI, UploadFile, File, Form
@@ -233,14 +278,16 @@ gis_router = CivicGISRouter()
 async def triage_grievance(
     lat: float = Form(...),
     lon: float = Form(...),
+    complaint_text: str = Form(None),
+    custom_address: str = Form(None),
     image: UploadFile = File(None),
     audio: UploadFile = File(None)
 ):
-    # 1. Resolve Location & Deduplication
-    ward_info = gis_router.resolve_location(lat, lon)
+    # 1. Geospatial Resolution & Deduplication
+    ward_info = gis_router.resolve_location(lat, lon, custom_address=custom_address)
     dup_info = gis_router.check_spatial_duplicate(lat, lon, "Civic Defect")
     
-    # 2. Process Vision (if present)
+    # 2. Vision Perception
     vision_res = None
     if image:
         temp_img = f"/tmp/{image.filename}"
@@ -248,53 +295,56 @@ async def triage_grievance(
             shutil.copyfileobj(image.file, f)
         vision_res = vision_engine.analyze_image(temp_img)
         
-    # 3. Process Audio (if present)
+    # 3. Audio / Text Intent
     audio_res = None
     if audio:
         temp_aud = f"/tmp/{audio.filename}"
         with open(temp_aud, "wb") as f:
             shutil.copyfileobj(audio.file, f)
         audio_res = audio_engine.analyze_audio_report(temp_aud)
+    elif complaint_text:
+        audio_res = audio_engine.analyze_text_report(complaint_text)
 
-    # 4. Synthesize Severity & Dispatch
-    severity = max(
-        vision_res["severity_score"] if vision_res else 0,
-        audio_res["severity_score"] if audio_res else 0,
-        40
-    )
+    # 4. Severity & SLA Synthesis
+    scores = []
+    if vision_res and vision_res.get("is_valid_civic_infrastructure", True):
+        scores.append(vision_res["severity_score"])
+    if audio_res:
+        scores.append(audio_res["severity_score"])
+    final_score = max(scores) if scores else 40
+
+    if ward_info.get("poi_vulnerability_multiplier", 1.0) > 1.0:
+        final_score = min(99, int(final_score * ward_info["poi_vulnerability_multiplier"]))
+
+    sla_hours = 2 if final_score >= 80 else (24 if final_score >= 60 else (72 if final_score >= 40 else 168))
     
     return {
         "status": "TRIAGED_AND_DISPATCHED",
+        "severity_score": final_score,
+        "enforced_sla_hours": sla_hours,
         "ward": ward_info,
         "deduplication": dup_info,
         "vision": vision_res,
-        "audio": audio_res,
-        "severity_score": severity
+        "audio": audio_res
     }
 ```
 
 ---
 
-## 📊 Benchmark Verification
-
-* **Road Pothole Perception**: Tested against 756 real-world benchmark images (Anant Singh Cross Pothole Dataset):
-  * Precision: **92.5%**
-  * Recall: **90.1%**
-  * False Positive Drop: **-52%** (via calibrated internal cutoff $0.38$)
-* **Structural Concrete Perception**: Tested against 2,000 concrete fracture images (Surface Crack Benchmark):
-  * False Alarms Filtered: **92% reduction** via edge-preserving bilateral filter (`d=5, sigmaColor=30`) and curvilinear thinness constraints (`aspect_ratio > 1.8`, `thinness > 14`).
-* **Geospatial Resolution**: Shapely Ray-Casting over 243 ward boundary multipolygons executes in **$< 3\text{ ms}$** on standard single-core CPU.
-
----
-
-## 💻 Running the Live Demonstration
+## 💻 8. Quickstart & Verification
 
 ```bash
-# 1. Install Dependencies
+# 1. Clone Branch
+git clone -b 2-CV https://github.com/Kanhaiya76618/civic-pilot.git
+cd civic-pilot
+
+# 2. Install Python Dependencies
 pip install -r requirements.txt
 
-# 2. Launch Streamlit Application
+# 3. Launch Interactive Demonstration
 streamlit run src/app_demo.py --server.port 8501
 ```
-* **Tab 1**: Unified Ingestion (Photo + Voice + Interactive Drag-and-Drop Map Pin).
-* **Tab 2**: Public Accountability Ledger (Before/After Photographic Proof + Citizen Dispute / Re-complaint Mechanism).
+
+* Open your browser at `http://localhost:8501`.
+* **Tab 1: 📝 File Civic Grievance**: Upload damage photos, voice calls, write statements, and view the real-time device GPS interactive map.
+* **Tab 2: 🔍 Public Transparency Ledger**: Inspect all triaged work orders, Before vs. After repair images, and test the Citizen Dispute / Re-complaint mechanism.
