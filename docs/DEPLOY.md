@@ -20,7 +20,7 @@ git clone https://huggingface.co/spaces/<user>/<space> hf-space
 ```
 
 ```bash
-rsync -a --exclude .git --exclude .venv --exclude .data --exclude .env ./ hf-space/
+rsync -a --exclude .git --exclude .venv --exclude .data --exclude .env --exclude web/node_modules --exclude web/dist ./ hf-space/
 ```
 
 ```bash
@@ -55,6 +55,8 @@ Then open http://localhost:7860.
 
 ## Notes
 
+- The Dockerfile builds the web app (`web/`) in a Node stage and copies only the built files into the image. You do not need Node on the server.
+- Set `PART1_API_URL` and `PART2_API_URL` when your teammates' services are live; until then their pages show "not connected yet".
 - Data lives in `/tmp/civic-data` inside the container and is lost on restart. That is fine for a demo; mount a volume to keep it.
 - Patches and drafts from the healer and explorer are written into `registry/*/patches` and `registry/*/drafts` inside the container. Copy any you want to keep into git.
 - The start-up script was tested outside Docker. The image itself was not built on the development machine (Docker was not running there): build it once before the deadline.

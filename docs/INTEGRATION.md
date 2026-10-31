@@ -12,6 +12,9 @@ whichever way fits your stack:
 
 Every `/v1` call sends `X-API-Key: <CIVIC_API_KEY>`. The schemas are in `/contracts`.
 
+To show your part inside the shared web app, also follow
+[UI_CONTRACT.md](UI_CONTRACT.md): it lists the endpoints and JSON the pages expect.
+
 ## Part 1 (rights and schemes explainer)
 
 **Live scheme lookup.** Send the citizen's answers; get back the official

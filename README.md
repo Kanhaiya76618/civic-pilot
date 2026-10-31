@@ -12,6 +12,60 @@ theirs (OTP, CAPTCHA, the final "yes"), and returns a signed receipt.
 - **Repairs itself.** When a portal changes, a two-stage healer fixes the broken step (label match first, then Claude) and saves a route patch for review.
 - **Safe by construction.** The model chooses *where* to act, never *what* to type. It cannot leave the portal, press Submit or Pay, or see a bank number.
 
+## The web app
+
+One React app (`web/`) for the whole of Civic Pulse, served by the same server:
+
+| Page | Part | What it does |
+|---|---|---|
+| `/` | all | Government-style home: hero, the three services, how it works, live stats from real runs |
+| `/schemes` | 1 | Ask in your language (speech input, 6 languages), answer with sources, eligibility and voice; the live myScheme finder |
+| `/schemes/engine` | 1 | Animated explainer pipeline with per-stage timing |
+| `/grievance` | 2 | Photo, voice note, GPS or PIN code (live India Post check), auto-routing, AI triage, filing through the agent |
+| `/board` | 2 | Public accountability board: stats, map, kanban, live agent follow-ups |
+| `/agent` | 3 | The agent console: ask anything in plain words; suggestion chips; recent runs; guardrails |
+| `/agent/runs/<run>` | 3 | One run, live or recorded: step list with each step's agent state (evaluation, memory, next goal, action), live browser and per-step screenshots, verified data with JSON copy, approval checkpoint, replay at 1×/2×/5× |
+| `/agent/history` | 3 | Every run: title, how it ran, status, steps, time, AI calls |
+| `/citizen/<task>` | 3 | The agent room: live browser, plain-language activity log, AI reasoning cards, OTP/CAPTCHA hand-off, approval sheet, signed receipt |
+
+Light, official look for citizens (tricolor strip, accessibility bar with text size
+and हिन्दी, original logo, glass and clay surfaces, original illustrations); a dark
+"mission control" agent room. Part 1 and Part 2 screens connect to your
+teammates' services through [docs/UI_CONTRACT.md](docs/UI_CONTRACT.md) and show an
+honest "not connected yet" panel until then; they never show made-up data. The
+logo is original: the national emblem is not used (its use is restricted by the
+State Emblem of India (Prohibition of Improper Use) Act, 2005).
+
+## The agent console (free-form requests)
+
+Type any request. One model call plans it, then code decides the path:
+
+```mermaid
+flowchart LR
+  Q[Request] --> P[Plan: 1 model call]
+  P -->|names a site outside the registry| X[Refused, nothing opened]
+  P -->|file something| F[Filing agent: your form, vault, approval before Submit]
+  P -->|every answer for a recorded route| T[Tier-1 replay, no AI in the loop]
+  P -->|find or learn| S[Search allow-listed sites]
+  S --> L[Step loop: perceive, think, act, evaluate]
+  L --> E[Extract: kept only if on the page]
+  E --> R[Answer + data JSON]
+```
+
+- **Search.** DuckDuckGo's HTML results first (no key), restricted to allow-listed sites. If DuckDuckGo shows its bot check, the run says so and uses the site's own search page instead. The check is never solved or bypassed. In our tests on 31 Oct 2026 DuckDuckGo blocked every automated request, so the official site search is what actually ran.
+- **Each step** is stored with a screenshot and the model's state (`previous_goal`, `eval`, `memory`, `next_goal`, `action`) and streamed to the page over SSE.
+- **Guarantees in code:** the browser cannot open a site outside the registry; the model may type only words from the request or its search keywords; final-submit buttons wait for the citizen's Approve and payment buttons are never pressed; an extracted item is kept only if its name is on the page and its link was on the page; long numbers and emails are removed from the request before anything is stored or sent.
+- **Replay** in the run view re-plays a recorded run's real steps and screenshots at 1×, 2× or 5×, always labelled "REPLAY of a run recorded <time>". There is no mode that passes a recording off as live.
+
+Measured live on 31 Oct 2026 (Claude Opus 5.5 via AIML API):
+
+| Request (typed fresh, not in the code) | Path | Steps | Time | AI calls | Result |
+|---|---|---|---|---|---|
+| "Is there a pension for elderly people with disabilities, and who qualifies for it?" | search, open scheme page, extract | 7 | 34 s | 6 | IGNDPS with eligibility and amounts read from its page |
+| "What help can a fisherman in Kerala get for buying a boat or nets?" | search, extract | 13 | 66 s | 12 | 4 schemes with links |
+| Widowed SC woman farmer, rural Bihar, full profile | Tier-1 replay of the myScheme finder | 23 | 10 s (4.5 s replay) | 1 | 92 schemes, first 10 listed |
+| "Book a train ticket … on irctc.co.in" | refused | 2 | 3.5 s | 1 | out of scope |
+
 ## Architecture
 
 ```mermaid
@@ -116,6 +170,10 @@ uv sync
 uv run playwright install chromium
 ```
 
+```bash
+npm --prefix web ci && npm --prefix web run build
+```
+
 Start the sandbox portal and the executor (two terminals):
 
 ```bash
@@ -126,7 +184,9 @@ uv run uvicorn sandbox_portal.app:app --port 8100
 CIVIC_HEADLESS=0 uv run uvicorn executor.api:app --port 8000
 ```
 
-Open http://127.0.0.1:8000, pick a service, enter details and consent. For the
+Open http://127.0.0.1:8000, pick a service, enter details and consent. To work on
+the UI with hot reload, also run `npm --prefix web run dev` and open http://127.0.0.1:5173
+(it proxies the API to port 8000). For the
 AI explore and repair features, put `AIMLAPI_KEY` (Claude through AIML API) or
 `ANTHROPIC_API_KEY` in `.env`; the executor loads it at start-up. Settings are
 listed in `.env.example`.
@@ -166,9 +226,12 @@ uv run python scripts/eval.py --runs 10
 ## Layout
 
 ```
+web/                 the React app (Vite, TypeScript, Tailwind, Motion): every page above
 executor/            the service
   api.py               REST, SSE, citizen endpoints, live-view websocket
-  public_app.py        citizen console and public endpoints (/ and /app/*)
+  public_app.py        serves the web app; public endpoints (/app/*), proxies to Part 1/2
+  console.py           agent console: planner, step loop, checked extraction, runs API (/app/agent/*)
+  search.py            allow-listed web search (DuckDuckGo HTML, else the site's own search)
   worker.py            task lifecycle, receipts, patches and drafts
   policy.py            consent, allow-lists, live checks, rate limit, kill switch
   runner.py            Tier 1 route runner
@@ -192,5 +255,7 @@ docs/                plan review, integration, deployment, submission text
 ## Honest limits
 
 - CI tests use scripted stand-ins for the model; the real-model numbers above come from one `scripts/eval.py --llm` run. Re-run it before the final submission.
+- myScheme's finder currently answers "No Schemes Found!" for the student profiles we tried (ages 19 and 20 in Bihar, 19 in Uttar Pradesh), while other profiles return results (a widowed farmer: 92; a construction worker: 3). We show the portal's own answer and do not invent results.
+- The console's research path takes 30–70 s and 6–12 model calls per request; the recorded-route path takes about 10 s with 1.
 - CPGRAMS and RTI Online are registered but locked (draft route, submission off) until a genuine filing is agreed.
 - A receipt's signature proves the record was not changed after issue. It does not prove a portal accepted anything.

@@ -13,6 +13,14 @@ keys, a deployment, team decisions, rehearsal.
 3. **Deploy** following `docs/DEPLOY.md` (Hugging Face Space, Docker). Build the image once; it has not been built yet.
 4. **Phone test** of the deployed URL: one myScheme lookup, then one grievance with OTP, CAPTCHA and approval done on the phone.
 
+## The web app (new)
+
+- Build it once before running: `npm --prefix web ci && npm --prefix web run build` (Docker does this for you).
+- Send **docs/UI_CONTRACT.md** to both friends: it lists the exact endpoints and JSON the unified app expects.
+  When their services are up, set `PART1_API_URL` and `PART2_API_URL` on the server, and their panels go live.
+- For the demo video, use the real pages: home → agent console (type a fresh question live, e.g. a judge's) → the off-limits chip (clean refusal) → the full-profile chip (Tier-1 replay ⚡) → grievance (OTP, CAPTCHA, approval) → board.
+- Replay in the run view is a labelled replay of a real recorded run. Use it only as "here is a run from earlier", never as the live run.
+
 ## Ask the organisers (one message)
 
 > We automate Indian government portals. For read-only services we run on the real portal (myScheme.gov.in) with live data.
