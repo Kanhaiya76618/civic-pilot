@@ -185,6 +185,85 @@ class CivicAudioTriageEngine:
             "audit_ledger_status": "VOICE_VERIFIED_AND_DISPATCHED"
         }
 
+    def analyze_text_report(self, text: str) -> Dict[str, Any]:
+        """
+        Analyze a citizen's written grievance text for intent, distress indicators, 
+        severity, and departmental routing without requiring audio.
+        """
+        text_lower = text.lower()
+        matched_category = "GENERAL_CIVIC_INQUIRY"
+        category_data = None
+        max_matches = 0
+
+        for cat_name, cat_info in CIVIC_CATEGORIES.items():
+            matches = sum(1 for kw in cat_info["keywords"] if kw in text_lower)
+            if matches > max_matches:
+                max_matches = matches
+                matched_category = cat_name
+                category_data = cat_info
+
+        base_score = category_data["base_severity"] if category_data else 30
+        primary_dept = category_data["primary_dept"] if category_data else "Citizen Grievance Cell"
+        secondary_dept = category_data["secondary_dept"] if category_data else "Municipal Helpdesk"
+
+        found_emergency = [w for w in EMERGENCY_INDICATORS if w in text_lower]
+        found_urgency = [w for w in HIGH_URGENCY_INDICATORS if w in text_lower]
+
+        urgency_score = 0
+        if found_emergency:
+            urgency_score += min(35, len(found_emergency) * 18)
+        if found_urgency:
+            urgency_score += min(20, len(found_urgency) * 10)
+
+        total_severity = min(99, max(15, base_score + urgency_score))
+
+        if total_severity >= 80 or len(found_emergency) > 0:
+            sla_tier = "CRITICAL_IMMEDIATE"
+            sla_hours = 2
+            priority_label = "CRITICAL (LIFE-SAFETY HAZARD)"
+        elif total_severity >= 60:
+            sla_tier = "HIGH"
+            sla_hours = 24
+            priority_label = "HIGH PRIORITY"
+        elif total_severity >= 40:
+            sla_tier = "MEDIUM"
+            sla_hours = 72
+            priority_label = "MEDIUM PRIORITY"
+        else:
+            sla_tier = "ROUTINE"
+            sla_hours = 168
+            priority_label = "ROUTINE MAINTENANCE"
+
+        location_patterns = [
+            r"(?:on|near|at|opposite|in front of)\s+([0-9a-zA-Z\s]{4,35}?)(?:\.|\,|near|before|after|with|causing|$)",
+            r"([0-9]+(?:th|rd|st|nd)?\s+(?:cross|main|street|road|avenue|sector|layout)[0-9a-zA-Z\s,]*)",
+            r"(indiranagar|koramangala|hosur\s+road|whitefield|jayanagar|mg\s+road|outer\s+ring\s+road|pillar\s+[0-9]+)"
+        ]
+        
+        extracted_locations = []
+        for pat in location_patterns:
+            matches = re.findall(pat, text_lower, re.IGNORECASE)
+            for m in matches:
+                clean_loc = m.strip().title()
+                if len(clean_loc) > 3 and clean_loc not in extracted_locations:
+                    extracted_locations.append(clean_loc)
+
+        return {
+            "audio_filename": "written_complaint.txt",
+            "transcript": text,
+            "category": matched_category,
+            "severity_score": total_severity,
+            "priority_label": priority_label,
+            "enforced_sla_hours": sla_hours,
+            "sla_tier": sla_tier,
+            "primary_department": primary_dept,
+            "secondary_department": secondary_dept,
+            "emergency_keywords_detected": found_emergency,
+            "urgency_keywords_detected": found_urgency,
+            "extracted_locations": extracted_locations[:3],
+            "audit_ledger_status": "TEXT_GRIEVANCE_VERIFIED"
+        }
+
 if __name__ == "__main__":
     engine = CivicAudioTriageEngine()
     samples_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ai_datasets", "audio_samples")

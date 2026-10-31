@@ -80,11 +80,15 @@ def save_ledger(tickets):
     with open(LEDGER_PATH, "w", encoding="utf-8") as f:
         json.dump(tickets, f, indent=2)
 
-# Session state initialization for interactive pin
+# Session state initialization for live location (NO prefilled dummy location)
 if "pinned_lat" not in st.session_state:
-    st.session_state.pinned_lat = 12.9716
+    st.session_state.pinned_lat = None
 if "pinned_lon" not in st.session_state:
-    st.session_state.pinned_lon = 77.6412
+    st.session_state.pinned_lon = None
+if "location_address" not in st.session_state:
+    st.session_state.location_address = None
+if "is_live_gps" not in st.session_state:
+    st.session_state.is_live_gps = True
 
 # --- HEADER ---
 st.markdown('<div class="main-title">🏛️ Transparent Civic Grievance & Infrastructure Triage System</div>', unsafe_allow_html=True)
@@ -99,7 +103,14 @@ tab_report, tab_ledger = st.tabs([
 # TAB 1: UNIFIED CITIZEN REPORTING (VISION + VOICE + DRAG & DROP MAP PIN)
 # =============================================================================
 with tab_report:
-    st.markdown("### 1. Ingest Evidence (Upload Image, Voice Note, or Both)")
+    st.markdown("### 1. File Civic Grievance & Evidence")
+
+    complaint_text = st.text_area(
+        "✍️ Grievance Description / Citizen Statement (Optional):",
+        placeholder="Type details about the issue (e.g., Severe pothole crater right outside the school gate causing skidding bikes, water pipe burst with flooding)...",
+        height=75,
+        key="citizen_complaint_desc"
+    )
 
     c_opt1, c_opt2 = st.columns(2)
     with c_opt1:
@@ -173,65 +184,84 @@ with tab_report:
     st.divider()
 
     # =========================================================================
-    # TRUE DRAG AND DROP PIN MAP (ZERO DECIMAL TYPING)
+    # 2. INCIDENT LOCATION: PURE LIVE LOCATION + TOGGLEABLE MAP (NO PREFILLED DATA)
     # =========================================================================
-    st.markdown("### 2. Location Pinpoint (Drag & Drop Pin on Map)")
-    st.info("📍 **Drag the red pin with your mouse/touch, or click anywhere on the street.** The system will continuously track your dropped location and auto-resolve the municipal ward and nodal officer.")
+    st.markdown("### 2. Incident Location")
 
-    col_map_box, col_info_box = st.columns([2, 1], gap="medium")
+    # Toggle to view/adjust map
+    show_map = st.toggle(
+        "🗺️ Toggle Map to Change Location (If incident is at a different spot)",
+        value=False,
+        help="Turn ON if you need to drag the pin to a different street than where you are standing."
+    )
 
-    with col_map_box:
-        # Call our Custom Draggable Pin Map Component
-        loc_payload = draggable_map_component(
-            lat=st.session_state.pinned_lat,
-            lon=st.session_state.pinned_lon,
-            default={"lat": st.session_state.pinned_lat, "lon": st.session_state.pinned_lon},
-            key="drag_and_drop_pin_widget"
-        )
+    # Always invoke component in DOM so client-side browser GPS auto-acquires seamlessly
+    loc_payload = draggable_map_component(
+        lat=st.session_state.pinned_lat,
+        lon=st.session_state.pinned_lon,
+        visible=show_map,
+        is_live=st.session_state.is_live_gps,
+        key="drag_and_drop_pin_widget"
+    )
 
-        # When citizen finishes dragging the pin, update session state!
-        if loc_payload:
-            new_lat = round(float(loc_payload.get("lat", st.session_state.pinned_lat)), 6)
-            new_lon = round(float(loc_payload.get("lon", st.session_state.pinned_lon)), 6)
-            if abs(new_lat - st.session_state.pinned_lat) > 0.00002 or abs(new_lon - st.session_state.pinned_lon) > 0.00002:
-                st.session_state.pinned_lat = new_lat
-                st.session_state.pinned_lon = new_lon
-                st.rerun()
+    # Sync any live GPS or user-dragged coordinates back to session state
+    if loc_payload:
+        n_lat = loc_payload.get("lat")
+        n_lon = loc_payload.get("lon")
+        n_addr = loc_payload.get("address", "")
+        n_live = loc_payload.get("is_live_gps", False)
 
-    cur_lat = round(st.session_state.pinned_lat, 5)
-    cur_lon = round(st.session_state.pinned_lon, 5)
+        changed = False
+        if n_lat is not None:
+            fl_lat = round(float(n_lat), 6)
+            if st.session_state.pinned_lat is None or abs(fl_lat - st.session_state.pinned_lat) > 0.00002:
+                st.session_state.pinned_lat = fl_lat
+                changed = True
+        if n_lon is not None:
+            fl_lon = round(float(n_lon), 6)
+            if st.session_state.pinned_lon is None or abs(fl_lon - st.session_state.pinned_lon) > 0.00002:
+                st.session_state.pinned_lon = fl_lon
+                changed = True
+        if n_addr and n_addr != st.session_state.location_address:
+            st.session_state.location_address = n_addr
+            changed = True
+        if n_live != st.session_state.is_live_gps:
+            st.session_state.is_live_gps = n_live
+            changed = True
 
-    # Dynamic ward resolution
-    quick_ward = gis_router.resolve_location(cur_lat, cur_lon)
+        if changed:
+            st.rerun()
 
-    with col_info_box:
-        st.markdown("**📍 Location & Ward Status:**")
+    # Display Current Live Location (NO prefilled dummy values)
+    if st.session_state.pinned_lat is not None and st.session_state.pinned_lon is not None:
+        cur_lat = round(st.session_state.pinned_lat, 5)
+        cur_lon = round(st.session_state.pinned_lon, 5)
+        quick_ward = gis_router.resolve_location(cur_lat, cur_lon, custom_address=st.session_state.location_address)
+
+        gps_status_badge = "🟢 Device GPS Verified (Real-Time)" if st.session_state.is_live_gps else "📍 Manually Adjusted Pin"
+
         st.markdown(f"""
-        <div class="pin-card">
-            🏛️ <b>Ward Name:</b> <b>{quick_ward['ward_name']}</b><br>
-            🏷️ <b>Ward No:</b> <b>{quick_ward['ward_number']}</b><br>
-            🏙️ <b>Municipality:</b> {quick_ward['city']}<br>
-            👷 <b>Zonal Engineer:</b> <code>{quick_ward['executive_engineer_in_charge']}</code><br>
-            🌐 <b>Coordinates:</b> <code>{cur_lat:.5f}° N, {cur_lon:.5f}° E</code>
+        <div style="background: #1e293b; border: 1px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 15px; font-weight: 700; color: #38bdf8;">📍 {'My Live Current Location' if st.session_state.is_live_gps else 'Incident Pinned Location'}</span>
+                <span style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">{gps_status_badge}</span>
+            </div>
+            <div style="font-size: 14px; line-height: 1.6; color: #f1f5f9;">
+                🏛️ <b>Jurisdiction / Area:</b> <b>{quick_ward['ward_name']}</b> &nbsp;|&nbsp; 🏙️ <b>Body:</b> {quick_ward['city']}<br>
+                👷 <b>Nodal Authority:</b> <code>{quick_ward['executive_engineer_in_charge']}</code><br>
+                🌐 <b>Live Coordinates:</b> <code>{cur_lat:.5f}° N, {cur_lon:.5f}° E</code>
+            </div>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.warning("📡 **Detecting your live device GPS location...** Please ensure location access is allowed in your browser prompt.")
+        cur_lat = None
+        cur_lon = None
 
-        st.write("")
-        st.markdown("**Quick Center On Neighborhood:**")
-        preset_options = {
-            "Indiranagar 100ft Road": (12.9716, 77.6412),
-            "Victoria Hospital Trauma Center": (12.9634, 77.5744),
-            "Hosur Road School Zone": (12.9348, 77.6188),
-            "Hebbal Flyover Pillar 14": (13.0358, 77.5970),
-            "Kempegowda Ward 01": (13.0645, 77.5742),
-            "Duplicate Simulation Point (15m from Active)": (12.9717, 77.6411)
-        }
-        chosen_preset = st.selectbox("Jump Map View:", list(preset_options.keys()), key="preset_jump_sel")
-        if st.button("🎯 Move Pin to Selected Neighborhood", use_container_width=True):
-            j_lat, j_lon = preset_options[chosen_preset]
-            st.session_state.pinned_lat = j_lat
-            st.session_state.pinned_lon = j_lon
-            st.rerun()
+    if show_map:
+        st.info("📍 **Drag the red pin with your mouse/touch, click anywhere on the street to adjust, or click '🎯 My Current GPS' on the map to re-center.**")
+    else:
+        st.caption("ℹ️ The complaint is set to your live location above. Turn on the **Toggle Map** switch anytime if you want to inspect the map or adjust the pin.")
 
     st.divider()
 
@@ -241,8 +271,10 @@ with tab_report:
     submit_btn = st.button("🚀 Submit Verified Civic Grievance & Execute Autonomous Triage", type="primary", use_container_width=True)
 
     if submit_btn:
-        if not target_image_path and not target_audio_path:
-            st.error("Please provide at least one form of evidence (Photo or Voice Note).")
+        if cur_lat is None or cur_lon is None:
+            st.error("Please allow GPS location access or toggle the map to pin your incident location before submitting.")
+        elif not target_image_path and not target_audio_path and not complaint_text.strip():
+            st.error("Please provide at least one form of evidence (Written Complaint, Photo, or Voice Note).")
         else:
             with st.spinner("Executing Unified Pipeline: Vision Gates ➔ Whisper ASR ➔ Ward PIP ➔ Deduplication..."):
                 vision_res = None
@@ -252,12 +284,14 @@ with tab_report:
                 if target_image_path and os.path.exists(target_image_path):
                     vision_res = vision_engine.analyze_image(target_image_path)
 
-                # Process Audio
+                # Process Audio or Written Text
                 if target_audio_path and os.path.exists(target_audio_path):
                     audio_res = audio_engine.analyze_audio_report(target_audio_path)
+                elif complaint_text.strip():
+                    audio_res = audio_engine.analyze_text_report(complaint_text.strip())
 
                 # Process GIS
-                ward_res = gis_router.resolve_location(cur_lat, cur_lon)
+                ward_res = gis_router.resolve_location(cur_lat, cur_lon, custom_address=st.session_state.location_address)
                 dup_res = gis_router.check_spatial_duplicate(cur_lat, cur_lon, "Civic Defect")
 
                 # =============================================================
@@ -346,15 +380,20 @@ with tab_report:
                             st.info("No photo attached for this report.")
 
                     with col_speech:
-                        st.markdown("**🎙️ Voice Note Transcription & Intent:**")
+                        st.markdown("**🎙️ Voice Note / Written Grievance:**")
                         if audio_res:
-                            st.info(f"\"{audio_res['transcript']}\"")
-                            if audio_res["emergency_keywords_detected"]:
+                            if audio_res.get("audio_filename") == "written_complaint.txt":
+                                st.info(f"✍️ **Citizen Statement:** \"{audio_res['transcript']}\"")
+                            else:
+                                st.info(f"🎙️ **Audio Transcript:** \"{audio_res['transcript']}\"")
+                            if audio_res.get("emergency_keywords_detected"):
                                 st.error(f"🚨 Emergency Flags: {', '.join(audio_res['emergency_keywords_detected'])}")
-                            if audio_res["extracted_locations"]:
+                            if audio_res.get("extracted_locations"):
                                 st.success(f"📍 Landmark Entities: {', '.join(audio_res['extracted_locations'])}")
+                        elif complaint_text.strip():
+                            st.info(f"✍️ **Citizen Statement:** \"{complaint_text.strip()}\"")
                         else:
-                            st.info("No audio attached for this report.")
+                            st.info("No voice note or written text attached for this report.")
 
                     # Save to Public Ledger DB if new
                     if not dup_res["is_duplicate"]:
@@ -362,6 +401,7 @@ with tab_report:
                         new_record = {
                             "ticket_id": new_ticket_id,
                             "title": f"Incident in {ward_res['ward_name']}",
+                            "description": complaint_text.strip() if complaint_text.strip() else (audio_res["transcript"] if audio_res else f"Incident in {ward_res['ward_name']}"),
                             "category": audio_res["category"] if audio_res else "ROADS_AND_PAVEMENTS",
                             "ward_name": ward_res["ward_name"],
                             "ward_no": ward_res["ward_number"],

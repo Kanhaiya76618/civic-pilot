@@ -91,16 +91,16 @@
 </head>
 <body>
   <div class="map-badge">📍 Drag & Drop Pin Anywhere on Street</div>
-  <button id="locate-btn" class="locate-btn" title="Use Device Real-Time GPS">🎯 My Current GPS</button>
-  <div id="coords-display" class="coords-badge">12.97160° N, 77.64120° E</div>
+  <button id="locate-btn" class="locate-btn" title="Acquire Device Real-Time GPS">🎯 My Current GPS</button>
+  <div id="coords-display" class="coords-badge">📡 Acquiring Live Location...</div>
   <div id="map"></div>
 
   <script>
-    let currentLat = 12.9716;
-    let currentLon = 77.6412;
+    let currentLat = null;
+    let currentLon = null;
     let isInitialized = false;
 
-    // Custom SVG Draggable Marker (No external image files needed!)
+    // Custom SVG Draggable Marker
     const pinSvg = `
       <svg width="38" height="48" viewBox="0 0 38 48" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M19 0C8.50659 0 0 8.50659 0 19C0 32.25 19 48 19 48C19 48 38 32.25 38 19C38 8.50659 29.4934 0 19 0Z" fill="#EF4444"/>
@@ -116,107 +116,173 @@
       iconAnchor: [19, 48]
     });
 
-    // Initialize Map with dark CartoDB tile layer (fallback to OSM)
+    // Default neutral center (India view until live location acquired)
     const map = L.map('map', {
       zoomControl: true,
       attributionControl: false
-    }).setView([currentLat, currentLon], 15);
+    }).setView([15.3935, 75.0249], 14);
 
-    // OpenStreetMap standard tile layer (100% Free, Public, Zero API Key Required)
+    // OpenStreetMap standard tile layer
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     // Add Draggable Marker
-    const marker = L.marker([currentLat, currentLon], {
+    const marker = L.marker([15.3935, 75.0249], {
       draggable: true,
       icon: customPinIcon,
       autoPan: true
     }).addTo(map);
 
-    function updateCoordsDisplay(lat, lon) {
+    function updateCoordsDisplay(lat, lon, label) {
       const el = document.getElementById('coords-display');
       if (el) {
-        el.innerText = `${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E`;
+        if (lat && lon) {
+          el.innerText = `${label ? label + ' | ' : ''}${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E`;
+        } else {
+          el.innerText = "📡 Acquiring Live Location...";
+        }
       }
     }
 
-    // Notify Streamlit Backend
-    function sendToStreamlit(lat, lon) {
+    // Reverse geocode via OpenStreetMap Nominatim client-side
+    function reverseGeocodeAndSend(lat, lon, isLive) {
       currentLat = lat;
       currentLon = lon;
-      updateCoordsDisplay(lat, lon);
+      updateCoordsDisplay(lat, lon, isLive ? "Live GPS" : "Pinned");
+
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14`, {
+        headers: { 'Accept': 'application/json' }
+      })
+      .then(res => res.json())
+      .then(data => {
+        let cleanName = "";
+        if (data && data.address) {
+          const parts = [];
+          const sub = data.address.suburb || data.address.neighbourhood || data.address.residential || data.address.subdistrict;
+          const city = data.address.city || data.address.town || data.address.county || data.address.village;
+          const state = data.address.state;
+          if (sub) parts.push(sub);
+          if (city && city !== sub) parts.push(city);
+          if (state) parts.push(state);
+          cleanName = parts.join(", ");
+        }
+        sendToStreamlit(lat, lon, cleanName || data.display_name || "Live GPS Location", isLive);
+      })
+      .catch(() => {
+        sendToStreamlit(lat, lon, "Live Device Location", isLive);
+      });
+    }
+
+    // Notify Streamlit Backend
+    function sendToStreamlit(lat, lon, addressName, isLive) {
+      currentLat = lat;
+      currentLon = lon;
+      updateCoordsDisplay(lat, lon, isLive ? "Live GPS" : "Pinned");
 
       window.parent.postMessage({
         isStreamlitMessage: true,
         type: "streamlit:setComponentValue",
-        value: { lat: parseFloat(lat.toFixed(6)), lon: parseFloat(lon.toFixed(6)) }
+        value: {
+          lat: parseFloat(lat.toFixed(6)),
+          lon: parseFloat(lon.toFixed(6)),
+          address: addressName || "Live Location",
+          is_live_gps: !!isLive
+        }
       }, "*");
+    }
+
+    // Auto-acquire real-time browser GPS
+    function autoAcquireGPS() {
+      if (!navigator.geolocation) {
+        updateCoordsDisplay(currentLat || 15.3935, currentLon || 75.0249, "GPS Unsupported");
+        return;
+      }
+      const btn = document.getElementById('locate-btn');
+      if (btn) btn.innerText = "⏳ Acquiring GPS...";
+
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          const gpsLat = pos.coords.latitude;
+          const gpsLon = pos.coords.longitude;
+          marker.setLatLng([gpsLat, gpsLon]);
+          map.setView([gpsLat, gpsLon], 16);
+          if (btn) btn.innerText = "🎯 My Current GPS";
+          reverseGeocodeAndSend(gpsLat, gpsLon, true);
+        },
+        function (err) {
+          if (btn) btn.innerText = "🎯 My Current GPS";
+          console.warn("GPS error:", err.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
     }
 
     // Handle Drag End event
     marker.on('dragend', function (e) {
       const pos = marker.getLatLng();
-      sendToStreamlit(pos.lat, pos.lng);
+      reverseGeocodeAndSend(pos.lat, pos.lng, false);
     });
 
-    // Also update coords in real time while dragging
+    // Update coords while dragging
     marker.on('drag', function (e) {
       const pos = marker.getLatLng();
-      updateCoordsDisplay(pos.lat, pos.lng);
+      updateCoordsDisplay(pos.lat, pos.lng, "Moving Pin");
     });
 
-    // Handle Map Click (Click anywhere to jump the pin!)
+    // Handle Map Click
     map.on('click', function (e) {
       marker.setLatLng(e.latlng);
-      sendToStreamlit(e.latlng.lat, e.latlng.lng);
+      reverseGeocodeAndSend(e.latlng.lat, e.latlng.lng, false);
     });
 
-    // Real-Time Hardware/Browser GPS Geolocation
+    // Manual Locate Button
     const locateBtn = document.getElementById('locate-btn');
     if (locateBtn) {
-      locateBtn.addEventListener('click', function () {
-        if (!navigator.geolocation) {
-          alert("Real-time GPS geolocation is not supported by your browser.");
-          return;
-        }
-        locateBtn.innerText = "⏳ Acquiring GPS...";
-        navigator.geolocation.getCurrentPosition(
-          function (position) {
-            const gpsLat = position.coords.latitude;
-            const gpsLon = position.coords.longitude;
-            marker.setLatLng([gpsLat, gpsLon]);
-            map.setView([gpsLat, gpsLon], 16);
-            sendToStreamlit(gpsLat, gpsLon);
-            locateBtn.innerText = "🎯 My Current GPS";
-          },
-          function (error) {
-            locateBtn.innerText = "🎯 My Current GPS";
-            alert("Could not retrieve real-time location (" + error.message + "). Ensure location access is allowed in your browser.");
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      });
+      locateBtn.addEventListener('click', autoAcquireGPS);
     }
 
     // Listen for events from Streamlit Python
     window.addEventListener("message", function (event) {
       if (event.data && event.data.type === "streamlit:render") {
         const args = event.data.args;
+        const isVisible = !(args && args.visible === false);
+
+        document.body.style.display = isVisible ? "block" : "none";
+        window.parent.postMessage({
+          isStreamlitMessage: true,
+          type: "streamlit:setFrameHeight",
+          height: isVisible ? 390 : 0
+        }, "*");
+
+        if (isVisible) {
+          setTimeout(function() { map.invalidateSize(); }, 150);
+        }
+
         if (args && args.lat && args.lon) {
           const newLat = parseFloat(args.lat);
           const newLon = parseFloat(args.lon);
-          if (Math.abs(newLat - currentLat) > 0.0001 || Math.abs(newLon - currentLon) > 0.0001) {
+          if (!currentLat || Math.abs(newLat - currentLat) > 0.0001 || Math.abs(newLon - currentLon) > 0.0001) {
             currentLat = newLat;
             currentLon = newLon;
             marker.setLatLng([newLat, newLon]);
             map.panTo([newLat, newLon]);
-            updateCoordsDisplay(newLat, newLon);
+            updateCoordsDisplay(newLat, newLon, args.is_live ? "Live GPS" : "Pinned");
           }
+        } else if (!currentLat) {
+          // If no coordinate provided from backend, automatically acquire live device GPS!
+          autoAcquireGPS();
         }
       }
     });
+
+    // On page load, attempt auto-acquisition if not already set
+    setTimeout(function() {
+      if (!currentLat) {
+        autoAcquireGPS();
+      }
+    }, 150);
 
     // Streamlit Component Handshake
     window.parent.postMessage({
@@ -231,7 +297,6 @@
       height: 400
     }, "*");
 
-    // Trigger map resize after iframe load
     setTimeout(function() {
       map.invalidateSize();
     }, 200);
