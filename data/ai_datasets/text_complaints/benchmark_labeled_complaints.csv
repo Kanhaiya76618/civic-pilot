@@ -1,0 +1,8 @@
+id,text,category,dept,severity,lat,lng
+GRIEV-001,Huge crater in the middle of 100ft road near Koramangala signal. Two bikers skidded already.,pothole,PWD_ROAD,critical,12.9352,77.6245
+GRIEV-002,"Underground drinking water main broken since morning, clean water flooding the street.",pipe_burst,WATER_SEWER,high,12.9716,77.5946
+GRIEV-003,Open sewage manhole without cover right outside primary school gate. Serious danger for kids.,manhole_open,WATER_SEWER,critical,12.9784,77.6408
+GRIEV-004,"Garbage not picked up for 4 days, foul smell and street dogs scattering waste.",garbage_dump,SWM_CLEAN,medium,12.9121,77.6445
+GRIEV-005,Live wire hanging loose from electrical pole after thunderstorm at 5th cross.,exposed_live_wire,ELEC_DISCOM,critical,12.925,77.59
+GRIEV-006,Street lights not working for past 2 weeks between pillar 120 and 130.,streetlight_out,ELEC_DISCOM,low,12.95,77.6
+GRIEV-007,Expansion joint on flyover bridge is vibrating dangerously under heavy trucks.,bridge_damage,PWD_ROAD,critical,12.9177,77.6238

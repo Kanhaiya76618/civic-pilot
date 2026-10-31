@@ -1,0 +1,70 @@
+{
+  "departments": [
+    {
+      "code": "PWD_ROAD",
+      "name": "Public Works Department - Roads & Bridges",
+      "categories": [
+        "pothole",
+        "asphalt_crack",
+        "bridge_damage",
+        "footpath_broken",
+        "speed_breaker_damaged"
+      ],
+      "base_sla_hours": {
+        "critical": 6,
+        "high": 24,
+        "medium": 72,
+        "low": 168
+      }
+    },
+    {
+      "code": "WATER_SEWER",
+      "name": "Water Supply & Sewerage Board",
+      "categories": [
+        "pipe_burst",
+        "sewage_overflow",
+        "contaminated_water",
+        "drain_blockage",
+        "manhole_open"
+      ],
+      "base_sla_hours": {
+        "critical": 4,
+        "high": 12,
+        "medium": 48,
+        "low": 96
+      }
+    },
+    {
+      "code": "SWM_CLEAN",
+      "name": "Solid Waste Management (Sanitation)",
+      "categories": [
+        "garbage_dump",
+        "animal_carcass",
+        "overflowing_bin",
+        "illegal_debris"
+      ],
+      "base_sla_hours": {
+        "critical": 8,
+        "high": 18,
+        "medium": 48,
+        "low": 120
+      }
+    },
+    {
+      "code": "ELEC_DISCOM",
+      "name": "Electricity Supply & Lighting",
+      "categories": [
+        "exposed_live_wire",
+        "transformer_spark",
+        "streetlight_out",
+        "pole_fallen"
+      ],
+      "base_sla_hours": {
+        "critical": 2,
+        "high": 6,
+        "medium": 24,
+        "low": 48
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# Large datasets & archives
+*.zip
+*.tar.gz
+data/ai_datasets/vision_damage/bridge_crack/
+data/ai_datasets/vision_damage/archive.zip
+anant_dataset/
+
+# Python cache & build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Streamlit
+.streamlit/

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="leaflet.css" />
+  <script src="leaflet.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      background: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #map {
+      height: 380px;
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      cursor: crosshair;
+    }
+    .custom-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4));
+      cursor: grab;
+      user-select: none;
+    }
+    .custom-pin:active {
+      cursor: grabbing;
+      transform: scale(1.15);
+    }
+    .map-badge {
+      position: absolute;
+      top: 12px;
+      left: 54px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.88);
+      color: #38bdf8;
+      border: 1px solid #0284c7;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+    }
+    .coords-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.88);
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="map-badge">📍 Drag & Drop Pin Anywhere on Street</div>
+  <div id="coords-display" class="coords-badge">12.97160° N, 77.64120° E</div>
+  <div id="map"></div>
+
+  <script>
+    let currentLat = 12.9716;
+    let currentLon = 77.6412;
+    let isInitialized = false;
+
+    // Custom SVG Draggable Marker (No external image files needed!)
+    const pinSvg = `
+      <svg width="38" height="48" viewBox="0 0 38 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 0C8.50659 0 0 8.50659 0 19C0 32.25 19 48 19 48C19 48 38 32.25 38 19C38 8.50659 29.4934 0 19 0Z" fill="#EF4444"/>
+        <circle cx="19" cy="19" r="8" fill="#FFFFFF"/>
+        <circle cx="19" cy="19" r="4.5" fill="#B91C1C"/>
+      </svg>
+    `;
+
+    const customPinIcon = L.divIcon({
+      className: 'custom-pin',
+      html: pinSvg,
+      iconSize: [38, 48],
+      iconAnchor: [19, 48]
+    });
+
+    // Initialize Map with dark CartoDB tile layer (fallback to OSM)
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([currentLat, currentLon], 15);
+
+    // OpenStreetMap standard tile layer (100% Free, Public, Zero API Key Required)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add Draggable Marker
+    const marker = L.marker([currentLat, currentLon], {
+      draggable: true,
+      icon: customPinIcon,
+      autoPan: true
+    }).addTo(map);
+
+    function updateCoordsDisplay(lat, lon) {
+      const el = document.getElementById('coords-display');
+      if (el) {
+        el.innerText = `${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E`;
+      }
+    }
+
+    // Notify Streamlit Backend
+    function sendToStreamlit(lat, lon) {
+      currentLat = lat;
+      currentLon = lon;
+      updateCoordsDisplay(lat, lon);
+
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: { lat: parseFloat(lat.toFixed(6)), lon: parseFloat(lon.toFixed(6)) }
+      }, "*");
+    }
+
+    // Handle Drag End event
+    marker.on('dragend', function (e) {
+      const pos = marker.getLatLng();
+      sendToStreamlit(pos.lat, pos.lng);
+    });
+
+    // Also update coords in real time while dragging
+    marker.on('drag', function (e) {
+      const pos = marker.getLatLng();
+      updateCoordsDisplay(pos.lat, pos.lng);
+    });
+
+    // Handle Map Click (Click anywhere to jump the pin!)
+    map.on('click', function (e) {
+      marker.setLatLng(e.latlng);
+      sendToStreamlit(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Listen for events from Streamlit Python
+    window.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "streamlit:render") {
+        const args = event.data.args;
+        if (args && args.lat && args.lon) {
+          const newLat = parseFloat(args.lat);
+          const newLon = parseFloat(args.lon);
+          if (Math.abs(newLat - currentLat) > 0.0001 || Math.abs(newLon - currentLon) > 0.0001) {
+            currentLat = newLat;
+            currentLon = newLon;
+            marker.setLatLng([newLat, newLon]);
+            map.panTo([newLat, newLon]);
+            updateCoordsDisplay(newLat, newLon);
+          }
+        }
+      }
+    });
+
+    // Streamlit Component Handshake
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:componentReady",
+      apiVersion: 1
+    }, "*");
+
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setFrameHeight",
+      height: 400
+    }, "*");
+
+    // Trigger map resize after iframe load
+    setTimeout(function() {
+      map.invalidateSize();
+    }, 200);
+  </script>
+</body>
+</html>
