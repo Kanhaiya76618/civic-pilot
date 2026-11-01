@@ -200,13 +200,13 @@ export default function AdminDesk() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast("ok", `Escalated to CPGRAMS! Ref: ${data.confirmation_number}`);
+        toast("ok", data.message ?? "Escalated for filing");
         fetchQueue();
       } else {
-        toast("error", data.detail || "AutoFile escalation failed");
+        toast("error", data.detail || "Escalation failed");
       }
     } catch {
-      toast("error", "Failed to trigger AutoFile agent");
+      toast("error", "Escalation failed");
     } finally {
       setAutofilingId(null);
     }
@@ -511,7 +511,7 @@ export default function AdminDesk() {
                     onClick={() => handleAutoFile(r.id)}
                   >
                     <Send className="size-3.5 mr-1" />
-                    {autofilingId === r.id ? "Escalating..." : "AutoFile CPGRAMS"}
+                    {autofilingId === r.id ? "Escalating..." : "Escalate for filing"}
                   </Button>
                 )}
               </div>

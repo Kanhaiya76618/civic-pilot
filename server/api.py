@@ -857,84 +857,43 @@ async def match_schemes(query: SchemeEligibilityQuery, db: Session = Depends(get
 @router.post("/api/v1/reports/{id}/autofile")
 async def trigger_autofile(
     id: str,
-    request: Request,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user)
+    admin_user: User = Depends(require_role(["admin"]))
 ):
     """
-    Closed-loop escalation:
-    High-severity / SLA-breached report is handed off to Part 3 Autonomous Execution Agent.
-    Files complaint on portal, posts signed receipt, and updates report status.
+    Escalation for filing: the report is flagged for the Part 3 filing agent.
+
+    Nothing is filed here and no confirmation number or "filed" receipt is created: a real filing happens only when
+    the agent runs on a portal and a person approves the final page (that run issues its own signed receipt).
     """
+    try:
+        uuid.UUID(id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Report not found")
     report = db.query(Report).filter(Report.id == id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # Generate a task for the execution agent
-    task_id = f"autofile-{report.ward_id.lower()}-{uuid.uuid4().hex[:6]}"
-    confirmation_no = f"CPGRAMS-{datetime.now().year}-{report.ward_id}-{uuid.uuid4().hex[:6].upper()}"
     now = datetime.now(timezone.utc)
-
-    # Cryptographically sign the filing receipt
-    receipt_payload = {
-        "task_id": task_id,
-        "report_id": str(report.id),
-        "confirmation_number": confirmation_no,
-        "portal_name": "CPGRAMS National Grievance Portal",
-        "category": report.category,
-        "ward": report.ward_id,
-        "description": report.description,
-        "submitted_at": now.isoformat()
-    }
-    
-    # Get last receipt hash for chaining
-    last_rcpt = db.query(ReceiptModel).order_by(ReceiptModel.submitted_at.desc()).first()
-    prev_hash = last_rcpt.ticket_hash if last_rcpt else ("0" * 64)
-    
-    signed = sign_receipt(receipt_payload, prev_hash=prev_hash)
-    
-    receipt_row = ReceiptModel(
-        id=str(uuid.uuid4()),
-        task_id=task_id,
-        report_id=report.id,
-        confirmation_number=confirmation_no,
-        portal_name=receipt_payload["portal_name"],
-        submitted_at=now,
-        receipt_url=f"/receipts/{task_id}.pdf",
-        signature=signed["signature"],
-        public_key=signed["public_key"],
-        prev_hash=signed["prev_hash"],
-        ticket_hash=signed["ticket_hash"],
-        payload=receipt_payload,
-        created_at=now
-    )
-    db.add(receipt_row)
-
-    # Update report
+    escalation_id = f"escalation-{(report.ward_id or 'ward').lower()}-{uuid.uuid4().hex[:6]}"
     report.status = "ASSIGNED"
-    report.assigned_to = "CPGRAMS Automated Route Runner"
+    report.assigned_to = "Escalated for filing (filing agent, pending approval)"
     report.updated_at = now
-
-    evt = ReportEvent(
+    db.add(ReportEvent(
         id=str(uuid.uuid4()),
         report_id=report.id,
         event_type="ASSIGNED",
-        payload={
-            "autofile": True,
-            "task_id": task_id,
-            "confirmation_number": confirmation_no
-        },
-        actor_role="system",
+        payload={"escalation": True, "escalation_id": escalation_id, "filed": False},
+        actor_role="admin",
+        actor_id=admin_user.id,
         created_at=now
-    )
-    db.add(evt)
+    ))
     db.commit()
-
     return {
         "ok": True,
-        "task_id": task_id,
-        "confirmation_number": confirmation_no,
-        "ticket_hash": signed["ticket_hash"],
+        "escalation_id": escalation_id,
+        "filed": False,
         "status": report.status,
-        "message": f"Successfully filed to {receipt_payload['portal_name']}. Confirmation #{confirmation_no} recorded in tamper-evident ledger."
+        "message": "Escalated for filing. Nothing has been filed yet: the filing agent fills the portal and a person "
+                   "approves the final page; that run issues the signed receipt."
     }

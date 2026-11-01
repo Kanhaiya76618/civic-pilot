@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-label="Swayam-sevak: civic services, assisted">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a1a3d"/>
+      <stop offset="1" stop-color="#13306b"/>
+    </linearGradient>
+    <pattern id="jali" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M24 4 44 24 24 44 4 24z" fill="none" stroke="#ffffff" stroke-opacity=".06"/>
+      <circle cx="24" cy="24" r="6" fill="none" stroke="#ffffff" stroke-opacity=".06"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <rect width="1200" height="300" fill="url(#jali)"/>
+  <rect y="0" width="400" height="6" fill="#ff9933"/><rect x="400" y="0" width="400" height="6" fill="#ffffff"/><rect x="800" y="0" width="400" height="6" fill="#138808"/>
+  <circle cx="1080" cy="40" r="120" fill="none" stroke="#ff9933" stroke-opacity=".18" stroke-width="34"/>
+  <circle cx="930" cy="300" r="70" fill="none" stroke="#138808" stroke-opacity=".25" stroke-width="22"/>
+  <g transform="translate(90 92)">
+    <circle cx="58" cy="58" r="58" fill="#ffffff"/>
+    <path d="M18 58a40 40 0 0 1 80 0" fill="none" stroke="#ff9933" stroke-width="9" stroke-linecap="round"/>
+    <path d="M18 58a40 40 0 0 0 80 0" fill="none" stroke="#138808" stroke-width="9" stroke-linecap="round"/>
+    <path d="M24 60h18l8-18 12 34 9-22 6 6h17" fill="none" stroke="#13306b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="240" y="150" font-family="Mukta, 'Noto Sans', Arial, sans-serif" font-size="68" font-weight="800" fill="#ffffff">Swayam-sevak</text>
+  <text x="640" y="150" font-family="'Noto Sans Devanagari', Mukta, sans-serif" font-size="46" font-weight="700" fill="#ffab52">स्वयंसेवक</text>
+  <text x="242" y="200" font-family="'Noto Sans', Arial, sans-serif" font-size="27" fill="#dce4f6">Understand your rights · Report problems · Let an agent do the paperwork</text>
+  <text x="242" y="240" font-family="'Noto Sans', Arial, sans-serif" font-size="20" fill="#8a9ac4">In 12 Indian languages · grounded in official sources · a human approves every submission</text>
+</svg>
