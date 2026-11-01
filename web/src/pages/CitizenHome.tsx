@@ -95,10 +95,11 @@ export default function CitizenHome() {
 
       {/* 3. News (8 columns) beside activity and trending (4 columns) */}
       <section className="mt-6 grid gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-8">
+        <div className="min-w-0 lg:col-span-8">
           <NewsPanel trendingOut={(terms, pick) => setTrend({ terms, pick })} />
         </div>
-        <aside className="grid content-start gap-6 lg:col-span-4">
+        {/* min-w-0 and minmax(0,1fr): long one-line titles must shrink with the column, not widen the page */}
+        <aside className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-6 lg:col-span-4">
           <RecentActivity />
           <section className={`${card} p-5`} aria-labelledby="trend-title">
             <h2 id="trend-title" className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><Flame className="size-5 text-saffron-600" />Trending in the news</h2>

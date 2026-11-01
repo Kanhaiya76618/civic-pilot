@@ -158,7 +158,7 @@ export function HistoryRow({ h, onDelete, compact }: { h: HistoryEntry; onDelete
   );
   const cls = "flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 text-left transition hover:bg-navy-50/70";
   return (
-    <motion.li layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-1">
+    <motion.li layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="flex min-w-0 items-center gap-1">
       {!h.link ? <div className={cls}>{body}</div> : external
         ? <a href={h.link} target="_blank" rel="noopener noreferrer" className={cls}>{body}</a>
         : <Link to={h.link} className={cls}>{body}</Link>}
@@ -171,7 +171,7 @@ export function RecentActivity() {
   const [items, setItems] = useState<HistoryEntry[] | null>(null);
   useEffect(() => { me.history().then((h) => setItems(h.slice(0, 6))).catch(() => setItems([])); }, []);
   return (
-    <section className="rounded-3xl bg-white p-5 shadow-[0_18px_44px_-30px_rgb(19_48_107/.45)] ring-1 ring-navy-100" aria-labelledby="recent-title">
+    <section className="min-w-0 rounded-3xl bg-white p-5 shadow-[0_18px_44px_-30px_rgb(19_48_107/.45)] ring-1 ring-navy-100" aria-labelledby="recent-title">
       <div className="flex items-center justify-between">
         <h2 id="recent-title" className="text-lg font-extrabold text-navy-900">Your recent activity</h2>
         <Link to="/history" className="inline-flex items-center gap-1 text-sm font-bold text-navy-700 hover:text-saffron-700">All<ArrowRight className="size-4" /></Link>
