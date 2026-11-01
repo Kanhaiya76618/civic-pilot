@@ -31,7 +31,7 @@ def seed_database():
         # 1. SEED USERS
         users_data = [
             {"id": "00000000-0000-0000-0000-000000000001", "email": "citizen@demo.in", "name": "Aarav Sharma", "role": "citizen"},
-            {"id": "00000000-0000-0000-0000-000000000002", "email": "admin@demo.in", "name": "Priya Nair (Municipal Desk Admin)", "role": "admin"}
+            {"id": "00000000-0000-0000-0000-000000000002", "email": "admin@demo.in", "name": "Kanhaiya Mehta (Municipal Desk Admin)", "role": "admin"}
         ]
         user_map = {}
         for u in users_data:

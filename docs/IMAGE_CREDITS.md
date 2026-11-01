@@ -9,3 +9,5 @@ The Civic Pulse logo and all inline SVG illustrations are original project asset
 | `commons-kolkata-worker.webp` | Indrajit Das, CC BY 4.0 | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Daily_wage_labour_in_Kolkata_04.jpg) |
 | `commons-mcd-hq.webp` | Nikhil B / Wikimedia Commons, attribution required | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:MCD_HQ.jpg) |
 | `civic-landing-community.webp`, `civic-reporting-repair.webp`, `civic-field-team.webp` | Original AI-generated Civic Pulse illustrative workflow images | Generated for this hackathon project; not photographs of a real government service or agency. |
+| `civic-saathi-3d.png` | Original AI-generated Civic Saathi character illustration | Generated for this hackathon project; a fictional digital guide, not a government official or a real person. |
+| `civic-schemes-guide-3d.webp`, `civic-reporting-guide-3d.webp` | Original AI-generated Civic Pulse 3D workflow illustrations | Generated for this hackathon project; fictional civic-service scenes, not depictions of a real government agency or people. |

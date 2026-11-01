@@ -3,7 +3,6 @@ import { ArrowRight, BookOpen, CircleCheck, CircleX, ExternalLink, Info, LoaderC
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type AppConfig, type Service } from "../api";
-import { SchemesArt } from "../components/Illustrations";
 import { ServiceForm } from "../components/ServiceForm";
 import { Badge, Button, Card, fadeUp, NotConnected, SectionTitle, stagger, useToast } from "../components/ui";
 
@@ -175,7 +174,7 @@ export default function Schemes() {
           <Link to="/schemes/engine" className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-navy-700 hover:text-saffron-700"><Workflow className="size-4" />See how answers are made (the engine room)</Link>
         </motion.div>
         <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.45 }}>
-          <Card variant="clay" className="bg-white p-6"><SchemesArt className="h-auto w-full" title="A citizen reading about her rights in Hindi and English" /></Card>
+          <Card variant="clay" className="overflow-hidden bg-white p-2"><img src="/images/civic-schemes-guide-3d.webp" alt="A citizen checks her eligibility and support options on a phone" className="aspect-[4/3] w-full rounded-[1.35rem] object-cover" /></Card>
         </motion.div>
       </section>
 

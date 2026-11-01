@@ -83,37 +83,54 @@ export default function AgentHome() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
-      <motion.div initial="hidden" animate="show" variants={stagger} className="mx-auto max-w-3xl text-center">
-        <motion.p variants={fadeUp} className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-amber-200 ring-1 ring-white/10"><Radio className="size-3.5" />Part 3 · Autonomous agent</motion.p>
-        <motion.h1 variants={fadeUp} className="text-4xl font-extrabold text-white sm:text-5xl">Ask the agent anything</motion.h1>
-        <motion.p variants={fadeUp} className="mt-3 text-lg text-slate-300">It plans, searches official sites, works the page in a live browser and brings back data it read there. You approve anything final.</motion.p>
-      </motion.div>
+      <section className="mx-auto grid max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,.92fr)]" aria-labelledby="agent-heading">
+        <div>
+          <motion.div initial="hidden" animate="show" variants={stagger}>
+            <motion.p variants={fadeUp} className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-amber-200 ring-1 ring-white/10"><Radio className="size-3.5" />Part 3 · Autonomous agent</motion.p>
+            <motion.h1 id="agent-heading" variants={fadeUp} className="max-w-xl text-4xl font-extrabold text-white sm:text-5xl">Ask the agent anything</motion.h1>
+            <motion.p variants={fadeUp} className="mt-3 max-w-2xl text-lg leading-8 text-slate-300">It plans, searches official sites, works the page in a live browser and brings back data it read there. You approve anything final.</motion.p>
+          </motion.div>
 
-      <motion.form onSubmit={run} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="glass-dark mx-auto mt-8 max-w-3xl rounded-3xl p-2 ring-1 ring-amber-300/20 focus-within:ring-2 focus-within:ring-amber-300/60">
-        <label htmlFor="ask" className="sr-only">Your request</label>
-        <textarea id="ask" ref={box} rows={2} value={query} onChange={(e) => setQuery(e.target.value)} maxLength={500}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(); } }}
-          placeholder="Ask anything… e.g. find schemes for a widow in rural Odisha"
-          className="block w-full resize-none bg-transparent px-4 py-3 text-lg text-white placeholder:text-slate-500 outline-none" />
-        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
-          <p className="text-xs text-slate-400">Works on myscheme.gov.in and the sandbox. Don't type Aadhaar, phone or bank numbers: runs are listed in the public history.</p>
-          <button type="submit" disabled={busy}
-            className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-saffron-500 px-5 font-semibold text-navy-900 shadow-[0_8px_20px_-8px_rgb(255_153_51/0.7)] transition hover:bg-saffron-400 disabled:opacity-60">
-            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}Run
-          </button>
+          <motion.form onSubmit={run} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+            className="glass-dark mt-7 rounded-3xl p-2 ring-1 ring-amber-300/20 focus-within:ring-2 focus-within:ring-amber-300/60">
+            <label htmlFor="ask" className="px-3 pt-3 text-sm font-semibold text-white">What would you like to know or get done?</label>
+            <textarea id="ask" ref={box} rows={2} value={query} onChange={(e) => setQuery(e.target.value)} maxLength={500}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(); } }}
+              placeholder="Try: find support for a farmer in rural Odisha"
+              className="mt-1 block w-full resize-none bg-transparent px-4 py-3 text-lg text-white placeholder:text-slate-500 outline-none" />
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1">
+              <p className="max-w-md text-xs leading-5 text-slate-400">Works on myscheme.gov.in and the sandbox. Never enter Aadhaar, phone or bank numbers here.</p>
+              <button type="submit" disabled={busy}
+                className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-saffron-500 px-5 font-semibold text-navy-900 shadow-[0_8px_20px_-8px_rgb(255_153_51/0.7)] transition hover:bg-saffron-400 disabled:opacity-60">
+                {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}Run
+              </button>
+            </div>
+          </motion.form>
+
+          <motion.div initial="hidden" animate="show" variants={stagger} className="mt-4 flex flex-wrap gap-2" aria-label="Suggested requests">
+            {CHIPS.map((c) => (
+              <motion.button key={c.label} variants={fadeUp} whileHover={{ y: -2 }} type="button"
+                onClick={() => { setQuery(c.text); box.current?.focus(); }}
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white/5 px-3.5 text-sm font-medium text-slate-200 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white">
+                <c.icon className="size-4 text-amber-300" />{c.label}
+              </motion.button>
+            ))}
+          </motion.div>
         </div>
-      </motion.form>
 
-      <motion.div initial="hidden" animate="show" variants={stagger} className="mx-auto mt-4 flex max-w-4xl flex-wrap justify-center gap-2" aria-label="Suggestions">
-        {CHIPS.map((c) => (
-          <motion.button key={c.label} variants={fadeUp} whileHover={{ y: -2 }} type="button"
-            onClick={() => { setQuery(c.text); box.current?.focus(); }}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-white/5 px-3.5 text-sm font-medium text-slate-200 ring-1 ring-white/10 hover:bg-white/10 hover:text-white">
-            <c.icon className="size-4 text-amber-300" />{c.label}
-          </motion.button>
-        ))}
-      </motion.div>
+        <motion.aside initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.35 }}
+          className="relative isolate min-h-[25rem] overflow-hidden rounded-[2rem] border border-white/10 bg-night-800 shadow-2xl shadow-black/35">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_14%,rgb(255_153_51_/_0.25),transparent_34%),radial-gradient(circle_at_84%_82%,rgb(19_136_8_/_0.26),transparent_44%)]" aria-hidden />
+          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-night-900/80 to-transparent" aria-hidden />
+          <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 }} className="absolute left-5 top-5 z-10 max-w-[12rem] rounded-2xl bg-white/95 p-3 text-navy-900 shadow-xl shadow-black/20 sm:left-7 sm:top-7">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.1em] text-leaf-700"><Sparkles className="size-3.5" />Civic Saathi</div>
+            <p className="mt-2 text-base font-bold leading-5">Namaste! What do you need today?</p>
+            <p className="mt-1.5 text-[11px] leading-4 text-slate-600">Ask me to explain, find support, or safely prepare a task.</p>
+          </motion.div>
+          <img src="/images/civic-saathi-3d.png" alt="Civic Saathi, a welcoming Indian digital guide holding a verified civic-services tablet" className="absolute bottom-0 right-0 z-[1] h-[94%] max-w-none select-none" draggable={false} />
+          <div className="absolute bottom-5 left-5 z-10 inline-flex items-center gap-2 rounded-full bg-night-950/80 px-3 py-2 text-[11px] font-semibold text-emerald-200 ring-1 ring-white/10 sm:left-7"><ShieldCheck className="size-4 text-emerald-300" />Always asks before it submits</div>
+        </motion.aside>
+      </section>
 
       <div className="mx-auto mt-10 grid max-w-4xl grid-cols-2 gap-3 text-center sm:grid-cols-4">
         {[["3.7–4s", "recorded route", "0 AI calls"], ["1 call", "to refuse", "an off-limits site"], ["3/3", "layout changes", "repaired"], ["0", "private values", "sent to AI"]].map(([v, a, b]) => (

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, type AppConfig, type Service } from "../api";
-import { CategoryArt, StreetArt, type Category } from "../components/Illustrations";
+import { CategoryArt, type Category } from "../components/Illustrations";
 import { ServiceForm } from "../components/ServiceForm";
 import { Badge, Button, Card, fadeUp, SectionTitle, stagger, useToast } from "../components/ui";
 
@@ -139,7 +139,7 @@ export default function Grievance() {
           <motion.h1 variants={fadeUp} className="mt-4 text-4xl font-extrabold leading-tight text-navy-900 sm:text-5xl">Report a civic problem. Track it until it's fixed.</motion.h1>
           <motion.p variants={fadeUp} className="mt-4 max-w-xl text-lg text-slate-700">Take a photo, say what's wrong, and we find the right department. Our agent files it on the grievance portal with your approval, and the reference number goes on the public board.</motion.p>
         </motion.div>
-        <Card variant="clay" className="overflow-hidden bg-white p-3"><StreetArt className="h-auto w-full" title="A citizen photographs a pothole on her street" /></Card>
+        <Card variant="clay" className="overflow-hidden bg-white p-2"><img src="/images/civic-reporting-guide-3d.webp" alt="A citizen photographs a pothole while municipal workers repair the road" className="aspect-[4/3] w-full rounded-[1.35rem] object-cover" /></Card>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-8" aria-labelledby="cat">
