@@ -451,7 +451,8 @@ async def get_public_stats(db: Session = Depends(get_db)):
     for r in resolved:
         diff = (r.updated_at - r.created_at).total_seconds() / 3600.0
         resolution_hours.append(max(1.0, diff))
-    avg_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else 24.0
+    # No resolved reports yet: say so (null), never a made-up average.
+    avg_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else None
 
     return {
         "total": total,

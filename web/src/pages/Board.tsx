@@ -8,7 +8,7 @@ import { Badge, Card, CountUp, fadeUp, NotConnected, stagger } from "../componen
 
 /** Part 2 contract (docs/UI_CONTRACT.md): GET /api/public/reports and GET /api/public/stats. */
 type Report = { code: string; lat: number; lng: number; severity: "P1" | "P2" | "P3"; status: string; category: string; source: "citizen" | "agent"; ward?: string; sla_breached?: boolean; resolution_proof_url?: string | null };
-type Stats = { total: number; open: number; resolved_pct: number; avg_resolution_hours: number; sla_breached: number };
+type Stats = { total: number; open: number; resolved_pct: number; avg_resolution_hours: number | null; sla_breached: number };
 
 const SEV_COLOR = { P1: "#DC2626", P2: "#FF9933", P3: "#138808" } as const;
 const COLUMNS = [
@@ -94,7 +94,7 @@ export default function Board() {
         {cards.map((c) => (
           <motion.div key={c.label} variants={fadeUp}><Card variant="glass" className="p-5">
             <c.icon className="size-6 text-saffron-600" aria-hidden />
-            <div className="mt-3 font-display text-4xl font-extrabold text-navy-900"><CountUp value={c.v} decimals={c.dec} suffix={c.suf} /></div>
+            <div className="mt-3 font-display text-4xl font-extrabold text-navy-900">{c.v == null ? "–" : <CountUp value={c.v} decimals={c.dec} suffix={c.suf} />}</div>
             <div className="text-sm font-medium text-slate-600">{c.label}</div>
           </Card></motion.div>
         ))}
