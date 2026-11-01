@@ -55,6 +55,22 @@ def get_db():
 
 # ----------------- Models -----------------
 
+from sqlalchemy.types import TypeDecorator
+
+
+class AwareDateTime(TypeDecorator):
+    """A timezone-aware timestamp on every database. PostgreSQL keeps the zone; SQLite (the local fallback) drops it,
+    which made "is this deadline past?" comparisons crash. Values read without a zone are UTC, as they were written."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -62,7 +78,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
     role = Column(String(50), nullable=False, default="citizen")  # 'citizen' or 'admin'
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     reports = relationship("Report", back_populates="user")
 
@@ -84,14 +100,14 @@ class Report(Base):
     evidence_urls = Column(JSON, default=list)  # list of URLs
     poi_distance_m = Column(Float, nullable=True)
     poi_multiplier = Column(Float, default=1.0)
-    sla_deadline = Column(DateTime(timezone=True), nullable=True)
+    sla_deadline = Column(AwareDateTime(), nullable=True)
     assigned_to = Column(String(255), nullable=True)
     resolution_proof_url = Column(Text, nullable=True)
     resolution_notes = Column(Text, nullable=True)
     duplicate_of = Column(String(36), ForeignKey("reports.id", ondelete="SET NULL"), nullable=True)
     upvotes = Column(Integer, default=1)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="reports")
     events = relationship("ReportEvent", back_populates="report", cascade="all, delete-orphan")
@@ -107,7 +123,7 @@ class ReportEvent(Base):
     payload = Column(JSON, default=dict)
     actor_role = Column(String(50), default="system")  # citizen, admin, system
     actor_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
 
     report = relationship("Report", back_populates="events")
 
@@ -120,14 +136,14 @@ class ReceiptModel(Base):
     report_id = Column(String(36), ForeignKey("reports.id", ondelete="SET NULL"), nullable=True, index=True)
     confirmation_number = Column(String(100), nullable=False)
     portal_name = Column(String(100), nullable=False)
-    submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    submitted_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
     receipt_url = Column(Text, nullable=True)
     signature = Column(Text, nullable=False)
     public_key = Column(Text, nullable=False)
     prev_hash = Column(String(64), nullable=False)
     ticket_hash = Column(String(64), nullable=False)
     payload = Column(JSON, default=dict)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
 
     report = relationship("Report", back_populates="receipts")
 
@@ -139,8 +155,8 @@ class AgentRun(Base):
     service = Column(String(100), nullable=False)
     status = Column(String(50), default="running")  # running, success, failed, waiting_human
     task_input = Column(JSON, default=dict)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     steps = relationship("AgentRunStep", back_populates="run", cascade="all, delete-orphan")
 
@@ -156,7 +172,7 @@ class AgentRunStep(Base):
     status = Column(String(50), nullable=False)
     screenshot_url = Column(Text, nullable=True)
     details = Column(JSON, default=dict)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
 
     run = relationship("AgentRun", back_populates="steps")
 
@@ -172,7 +188,7 @@ class Scheme(Base):
     eligibility_criteria = Column(JSON, default=dict)
     benefits = Column(Text, nullable=False)
     application_url = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
 
 
 class PortalRegistry(Base):
@@ -184,7 +200,7 @@ class PortalRegistry(Base):
     base_url = Column(Text, nullable=False)
     route_manifest = Column(JSON, default=dict)
     is_active = Column(Boolean, default=True)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(AwareDateTime(), default=lambda: datetime.now(timezone.utc))
 
 
 def init_db():
