@@ -20,7 +20,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(".env")
+ROOT = Path(__file__).resolve().parent.parent  # the project folder, so `server` imports from anywhere
+sys.path.insert(0, str(ROOT))
+load_dotenv(ROOT / ".env")
 from sqlalchemy import inspect  # noqa: E402
 
 from server.db import ReceiptModel, Report, ReportEvent, SessionLocal  # noqa: E402
@@ -44,7 +46,7 @@ print(f"Delete: {len(others)} reports, their events, and {db.query(ReceiptModel)
 if not apply:
     sys.exit("Dry run: nothing changed. Add --apply to do it.")
 
-backup = Path(".data/backups") / f"before-cleanup-{datetime.datetime.now():%Y%m%d-%H%M%S}.json"
+backup = ROOT / ".data" / "backups" / f"before-cleanup-{datetime.datetime.now():%Y%m%d-%H%M%S}.json"
 backup.parent.mkdir(parents=True, exist_ok=True)
 backup.write_text(json.dumps({"reports": rows(Report), "report_events": rows(ReportEvent), "receipts": rows(ReceiptModel)},
                              default=str, ensure_ascii=False, indent=1))
