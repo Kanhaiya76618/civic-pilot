@@ -12,6 +12,7 @@ os.environ.update(
     CIVIC_STEP_TIMEOUT_MS="8000",
     SANDBOX_TEST_MODE="1",
     CIVIC_SKIP_DOTENV="1",  # tests never pick up the developer's real keys
+    CIVIC_ALLOW_DEMO_LOGIN="1",  # password-less demo accounts: tests only, never in a deployment
 )
 
 import threading  # noqa: E402

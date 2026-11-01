@@ -1,40 +1,136 @@
 import { motion } from "motion/react";
-import { ArrowRight, Bot, FileSearch, MapPinned, ReceiptText, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
-import { api, type Run } from "../api";
+import { ArrowRight, Bot, FileSearch, Flame, Hand, KeyRound, Map, MapPinned, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { me, type HistoryEntry, type News } from "../api";
 import { getAuthSession } from "../auth";
-import { Badge, Card, CountUp } from "../components/ui";
+import { NewsPanel, RecentActivity } from "../components/HomeWidgets";
+import { fadeUp, stagger } from "../components/ui";
+
+const ACTIONS = [
+  { icon: FileSearch, title: "Explain a notice", body: "Rights, eligibility and impact, in your language, with a voice.", to: "/schemes", tint: "bg-leaf-50 text-leaf-700 ring-leaf-200" },
+  { icon: MapPinned, title: "Report a problem", body: "Photo, location and the right department, filed with your approval.", to: "/grievance", tint: "bg-saffron-50 text-saffron-700 ring-saffron-200" },
+  { icon: Bot, title: "Ask the agent", body: "It searches official sites and works the portal while you watch.", to: "/agent", tint: "bg-navy-50 text-navy-700 ring-navy-200" },
+  { icon: Map, title: "Accountability board", body: "See reported issues and how they are being handled.", to: "/board", tint: "bg-slate-100 text-slate-700 ring-slate-200" },
+];
+
+const card = "rounded-3xl bg-white shadow-[0_18px_44px_-30px_rgb(19_48_107/.45)] ring-1 ring-navy-100";
+
+function QuickAsk() {
+  const nav = useNavigate();
+  const [q, setQ] = useState("");
+  const go = (to: "explain" | "agent") => (e?: FormEvent) => {
+    e?.preventDefault();
+    const text = q.trim();
+    if (!text) return;
+    nav(to === "agent" ? `/agent?q=${encodeURIComponent(text)}` : `/schemes?q=${encodeURIComponent(text)}`);
+  };
+  return (
+    <form onSubmit={go("agent")} className="mt-6 rounded-2xl bg-white/10 p-2 ring-1 ring-white/20 backdrop-blur focus-within:ring-2 focus-within:ring-saffron-300">
+      <label htmlFor="quick-ask" className="sr-only">What do you need?</label>
+      <input id="quick-ask" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Which pension can my mother get in Bihar?"
+        className="min-h-11 w-full bg-transparent px-3 text-base text-white outline-none placeholder:text-navy-200" />
+      <div className="mt-1 grid gap-2 sm:grid-cols-2">
+        <button type="submit" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-saffron-500 px-4 font-semibold text-navy-900 hover:bg-saffron-400">
+          <Bot className="size-4" />Ask the agent
+        </button>
+        <button type="button" onClick={go("explain")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white/10 px-4 font-semibold text-white ring-1 ring-white/25 hover:bg-white/15">
+          <FileSearch className="size-4" />Explain a document
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export default function CitizenHome() {
   const session = getAuthSession();
-  const [runs, setRuns] = useState<Run[]>([]);
-  useEffect(() => { if (session) api.runs().then(setRuns).catch(() => setRuns([])); }, [session]);
-  const stats = useMemo(() => ({
-    recorded: runs.length,
-    complete: runs.filter((r) => r.status === "completed").length,
-    receipts: runs.filter((r) => r.reference_no).length,
-  }), [runs]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [trend, setTrend] = useState<{ terms: News["trending"]; pick: (t: string) => void } | null>(null);
+  useEffect(() => { if (session) me.history().then(setHistory).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const counts = useMemo(() => ({
+    done: history.filter((h) => h.kind !== "news").length,
+    saved: history.filter((h) => h.kind === "news").length,
+    week: history.filter((h) => Date.now() - new Date(h.created_at).getTime() < 7 * 864e5).length,
+  }), [history]);
   if (!session || session.user.role !== "citizen") return <Navigate to="/signin?role=citizen" replace />;
-  const firstName = session.user.name.split(" ")[0] || "there";
-  return <div className="mx-auto max-w-7xl px-4 py-10 sm:py-14">
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] bg-navy-800 px-6 py-10 text-white shadow-[0_24px_55px_-28px_rgb(19_48_107/.65)] sm:px-10 sm:py-12">
-      <div className="absolute right-0 top-0 size-64 translate-x-1/3 -translate-y-1/3 rounded-full border-[36px] border-saffron-400/20" /><div className="absolute bottom-0 right-28 size-36 translate-y-1/2 rounded-full border-[24px] border-leaf-500/25" />
-      <Badge tone="saffron"><Sparkles className="size-3.5" />Citizen workspace</Badge><h1 className="relative mt-4 text-4xl font-extrabold sm:text-5xl">Hello, {firstName}. What can we help with?</h1><p className="relative mt-3 max-w-2xl text-lg text-navy-100">Choose a service, keep control of your personal information, and follow the outcome from one place.</p>
-    </motion.div>
+  const first = session.user.name.trim().split(/\s+/)[0] ?? "";
+  const firstName = first ? first[0].toUpperCase() + first.slice(1) : "there";
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
-    <section className="mt-8 grid gap-4 md:grid-cols-3" aria-label="Start a task">
-      {[{ icon: FileSearch, title: "Find schemes", body: "Explore official scheme information and eligibility questions.", to: "/schemes", c: "bg-saffron-50 text-saffron-700" }, { icon: MapPinned, title: "Report a local problem", body: "Send evidence and a location to the civic triage flow.", to: "/grievance", c: "bg-leaf-50 text-leaf-700" }, { icon: Bot, title: "Ask the agent", body: "Research an allowed portal or work through a guided filing.", to: "/agent", c: "bg-navy-50 text-navy-700" }].map((item) => <Link key={item.title} to={item.to} className="group"><Card variant="plain" className="h-full p-6 transition duration-200 hover:-translate-y-1 hover:shadow-lg"><span className={`grid size-12 place-items-center rounded-2xl ${item.c}`}><item.icon className="size-6" /></span><h2 className="mt-5 text-xl font-extrabold text-navy-900">{item.title}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{item.body}</p><span className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-navy-700">Start <ArrowRight className="size-4 transition group-hover:translate-x-1" /></span></Card></Link>)}
-    </section>
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
+      {/* 1. Welcome band */}
+      <motion.section initial="hidden" animate="show" variants={stagger}
+        className="relative grid gap-6 overflow-hidden rounded-[2rem] bg-navy-800 p-6 text-white shadow-[0_24px_55px_-28px_rgb(19_48_107/.65)] sm:p-8 lg:grid-cols-12 lg:items-end">
+        <div className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full border-[40px] border-saffron-400/15" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-20 right-1/3 size-48 rounded-full border-[28px] border-leaf-500/20" aria-hidden />
+        <motion.div variants={fadeUp} className="relative lg:col-span-7">
+          <p className="text-sm font-semibold text-saffron-300">{today}</p>
+          <h1 className="mt-1 text-3xl font-extrabold leading-tight sm:text-4xl">Namaste, {firstName}. What do you need today?</h1>
+          <QuickAsk />
+        </motion.div>
+        <motion.dl variants={fadeUp} className="relative grid grid-cols-3 gap-3 lg:col-span-5">
+          {[[counts.done, "things done"], [counts.week, "this week"], [counts.saved, "saved news"]].map(([n, label]) => (
+            <div key={String(label)} className="rounded-2xl bg-white/10 p-4 text-center ring-1 ring-white/15">
+              <dd className="font-display text-3xl font-extrabold tabular-nums">{n}</dd>
+              <dt className="mt-1 text-xs font-semibold text-navy-100">{label}</dt>
+            </div>
+          ))}
+        </motion.dl>
+      </motion.section>
 
-    <section className="mt-10 grid gap-6 lg:grid-cols-[1.25fr_.75fr]">
-      <div><div className="flex items-end justify-between gap-4"><div><Badge tone="navy">Live server activity</Badge><h2 className="mt-3 text-3xl font-extrabold text-navy-900">A transparent path forward.</h2></div><Link to="/board" className="mb-1 hidden items-center gap-1 text-sm font-bold text-navy-700 hover:text-saffron-700 sm:inline-flex">Public board <ArrowRight className="size-4" /></Link></div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">{[[stats.recorded, "Tasks recorded"], [stats.complete, "Completed outcomes"], [stats.receipts, "Reference numbers"]].map(([value, label]) => <Card key={String(label)} variant="glass" className="p-5"><div className="font-display text-4xl font-extrabold text-navy-900"><CountUp value={Number(value)} /></div><div className="mt-1 text-sm font-medium text-slate-600">{String(label)}</div></Card>)}</div>
-        <Link to="/board" className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-navy-700 hover:text-saffron-700 sm:hidden">Public board <ArrowRight className="size-4" /></Link>
-      </div>
-      <Card variant="dark" className="p-6"><div className="flex items-center gap-2 text-saffron-300"><ShieldCheck className="size-5" /><span className="text-sm font-bold uppercase tracking-wider">You stay in control</span></div><h2 className="mt-4 text-2xl font-extrabold text-white">The agent pauses for human-only actions.</h2><p className="mt-3 text-sm leading-6 text-navy-100">It never types your OTP, solves a CAPTCHA or completes a submission without your visible approval.</p><Link to="/agent" className="mt-6 inline-flex items-center gap-2 text-sm font-bold text-saffron-300 hover:text-saffron-200">See how it works <ArrowRight className="size-4" /></Link></Card>
-    </section>
+      {/* 2. Actions: four equal tiles */}
+      <motion.section initial="hidden" animate="show" variants={stagger} className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Start something">
+        {ACTIONS.map((a) => (
+          <motion.div key={a.title} variants={fadeUp} whileHover={{ y: -3 }}>
+            <Link to={a.to} className={`group flex h-full flex-col p-5 ${card} transition hover:ring-navy-300`}>
+              <span className={`grid size-11 place-items-center rounded-2xl ring-1 ${a.tint}`}><a.icon className="size-5" /></span>
+              <h2 className="mt-4 text-lg font-extrabold text-navy-900">{a.title}</h2>
+              <p className="mt-1 flex-1 text-sm leading-6 text-slate-600">{a.body}</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-navy-700">Start<ArrowRight className="size-4 transition group-hover:translate-x-1" /></span>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.section>
 
-    <section className="mt-10 rounded-3xl border border-navy-100 bg-white/80 p-6 sm:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-extrabold text-navy-900">Keep your record close.</h2><p className="mt-2 max-w-2xl text-slate-600">Use the public accountability board to see reported civic issues and verify visible service progress. Personal form data remains private.</p></div><ReceiptText className="size-8 text-saffron-600" /></div><Link to="/board" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-navy-700 px-4 font-semibold text-white transition hover:bg-navy-800">Open accountability board <ArrowRight className="size-4" /></Link></section>
-  </div>;
+      {/* 3. News (8 columns) beside activity and trending (4 columns) */}
+      <section className="mt-6 grid gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <NewsPanel trendingOut={(terms, pick) => setTrend({ terms, pick })} />
+        </div>
+        <aside className="grid content-start gap-6 lg:col-span-4">
+          <RecentActivity />
+          <section className={`${card} p-5`} aria-labelledby="trend-title">
+            <h2 id="trend-title" className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><Flame className="size-5 text-saffron-600" />Trending in the news</h2>
+            <p className="mt-1 text-xs text-slate-500">Most mentioned in the current headlines. Tap one to filter.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!trend && <span className="h-8 w-40 animate-pulse rounded-full bg-navy-50" />}
+              {trend?.terms.length === 0 && <span className="text-sm text-slate-500">Nothing stands out right now.</span>}
+              {trend?.terms.map((t) => (
+                <button key={t.term} onClick={() => { trend.pick(t.term); document.getElementById("news-title")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-saffron-50 px-3 text-sm font-semibold text-saffron-800 ring-1 ring-saffron-200 hover:bg-saffron-100">
+                  {t.term}<span className="rounded-full bg-white px-1.5 text-xs text-saffron-700">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      {/* 4. Control */}
+      <section className="mt-6 grid gap-4 rounded-3xl bg-navy-900 p-5 text-white sm:grid-cols-3 sm:p-6" aria-label="You stay in control">
+        {[
+          { icon: ShieldCheck, t: "Nothing filed without your yes", b: "Final Submit waits for your approval." },
+          { icon: KeyRound, t: "Private details stay sealed", b: "Phone and bank details are encrypted, never shown to the AI." },
+          { icon: Hand, t: "You type the OTP", b: "The agent pauses for OTPs, CAPTCHAs and choices only you can make." },
+        ].map((x) => (
+          <div key={x.t} className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/10"><x.icon className="size-5 text-saffron-300" /></span>
+            <span><span className="block font-bold">{x.t}</span><span className="block text-sm text-navy-100">{x.b}</span></span>
+          </div>
+        ))}
+      </section>
+      <p className="mt-4 flex items-center gap-1.5 text-xs text-slate-500"><Sparkles className="size-3.5" />Your history is private to your account and keeps only titles and links, never documents or private details.</p>
+    </div>
+  );
 }

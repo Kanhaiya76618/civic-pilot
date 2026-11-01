@@ -20,6 +20,7 @@ const AgentRoom = lazy(() => import("./pages/AgentRoom"));
 const AgentHistory = lazy(() => import("./pages/AgentHistory"));
 const AgentRun = lazy(() => import("./pages/AgentRun"));
 const CitizenHome = lazy(() => import("./pages/CitizenHome"));
+const MyHistory = lazy(() => import("./pages/MyHistory"));
 const SignIn = lazy(() => import("./pages/SignIn"));
 
 function Fallback() {
@@ -53,6 +54,7 @@ function App() {
           <Route path="/signin" element={<SignIn />} />
           <Route element={<RequireAuth />}>
             <Route path="/home" element={<CitizenHome />} />
+            <Route path="/history" element={<MyHistory />} />
             <Route path="/schemes" element={<Schemes />} />
             <Route path="/schemes/engine" element={<Engine />} />
             <Route path="/grievance" element={<Grievance />} />

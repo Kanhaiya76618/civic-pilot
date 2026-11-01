@@ -138,3 +138,44 @@ export const api = {
 };
 
 export const secs = (ms?: number | null) => (ms == null ? "–" : ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 1000)}s`);
+
+// ------------------------------------------------------------------ home page: live news and the citizen's own history
+export type NewsItem = { title: string; url: string; source: string; published: string | null; topic: string; official: boolean; lang: string };
+export type News = { updated_at: string; items: NewsItem[]; trending: { term: string; count: number }[]; topics: { id: string; label: string }[];
+  sources: string[]; stale: boolean };
+export type HistoryKind = "explain" | "agent" | "lookup" | "filing" | "report" | "news";
+export type HistoryEntry = { id: string; kind: HistoryKind; title: string; subtitle: string | null; link: string | null; meta: Record<string, unknown>; created_at: string };
+
+function authHeaders(): Record<string, string> {
+  try {
+    const raw = sessionStorage.getItem("civic-pulse-auth");
+    const token = raw ? (JSON.parse(raw).token as string) : "";
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch { return {}; }
+}
+
+export const me = {
+  news: (refresh = false) => fetch(`/app/news${refresh ? "?refresh=true" : ""}`).then(json<News>),
+  history: (kind?: HistoryKind) => fetch(`/app/me/history${kind ? `?kind=${kind}` : ""}`, { headers: authHeaders() }).then(json<HistoryEntry[]>),
+  add: (entry: { kind: HistoryKind; title: string; subtitle?: string | null; link?: string | null; meta?: Record<string, unknown> }) =>
+    fetch("/app/me/history", { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(entry) })
+      .then(json<HistoryEntry & { already_saved?: boolean }>),
+  remove: (id: string) => fetch(`/app/me/history/${id}`, { method: "DELETE", headers: authHeaders() }).then(json<{ ok: boolean }>),
+  clear: (kind?: HistoryKind) => fetch(`/app/me/history${kind ? `?kind=${kind}` : ""}`, { method: "DELETE", headers: authHeaders() }).then(json<{ deleted: number }>),
+};
+
+/** Keep a line in the signed-in citizen's history. Never blocks or breaks the action that triggered it. */
+export function remember(entry: Parameters<typeof me.add>[0]) {
+  if (!authHeaders().Authorization) return;
+  me.add(entry).catch(() => {});
+}
+
+export function ago(iso: string | null): string {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 86400 * 7) return `${Math.round(s / 86400)} d ago`;
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}

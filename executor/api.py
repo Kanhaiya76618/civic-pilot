@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from .config import settings
 from .db import Store
 from .console import make_console_router
+from .account import make_account_router
 from .explainer import make_explainer_router
 from .public_app import make_router, mount_spa, spa_index
 from .models import TERMINAL_STATUSES, ApplicationTask, CitizenProfile, ConsentRecord, Receipt, TaskStatus, TaskView
@@ -75,6 +76,7 @@ def make_app(executor_factory=None) -> FastAPI:
 
     app.include_router(unified_civic_router)
     app.include_router(make_explainer_router(ex))  # before make_router: its /app/part1 pass-through is the fallback
+    app.include_router(make_account_router(ex))
     app.include_router(make_router(ex))
     app.include_router(make_console_router(ex))
 

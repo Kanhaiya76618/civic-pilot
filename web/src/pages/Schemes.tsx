@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, BookOpen, Bot, CalendarClock, CircleCheck, CircleX, ClipboardPaste, ExternalLink, FileUp, Info, Link2, Languages, ListChecks, LoaderCircle, Mic, Pause, Scale, ScanText, Search, ShieldCheck, Square, Store, UserCheck, Users, Volume2, Workflow } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type AppConfig, type Service } from "../api";
+import { api, remember, type AppConfig, type Service } from "../api";
 import { ServiceForm } from "../components/ServiceForm";
 import { Badge, Button, Card, fadeUp, NotConnected, SectionTitle, stagger, useToast } from "../components/ui";
 
@@ -292,6 +292,10 @@ export default function Schemes() {
       const res: Explanation = await api.part1("api/explain", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ doc_id: d.doc_id, question: q, language, auto_language: !picked && q.trim().length > 0 }) });
       setEx(res);
+      remember({
+        kind: "explain", title: res.title.slice(0, 200), subtitle: `${LANGS.find((l) => l.code === res.language)?.label ?? res.language} · ${res.question}`.slice(0, 300),
+        link: d.url ? `/schemes?url=${encodeURIComponent(d.url)}&lang=${res.language}` : "/schemes", meta: { doc_id: d.doc_id },
+      });
       if (res.language !== language) setLang(res.language);
     } catch (err) { toast("error", (err as Error).message); }
     setBusy(false);

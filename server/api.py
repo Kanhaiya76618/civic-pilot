@@ -141,7 +141,9 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     email = req.email.strip().lower()
     # Existing automated tests and seeded local demo remain usable, but the browser UI always submits a password.
     if not req.password:
-        if email in DEMO_IDENTITIES:
+        # Password-less demo accounts exist for automated tests only. Without this switch (never set in a
+        # deployment) nobody can sign in as citizen@demo.in or the admin@demo.in municipal desk without a password.
+        if email in DEMO_IDENTITIES and os.environ.get("CIVIC_ALLOW_DEMO_LOGIN") == "1":
             return _legacy_demo_login(db, email)
         raise HTTPException(status_code=422, detail="Password is required. Create an account if you are new to Swayam-sevak.")
     client = _supabase_auth_client()

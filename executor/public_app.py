@@ -32,7 +32,7 @@ from .registry import RegistryError
 STATIC = Path(__file__).parent / "static"
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 # Client-side routes of the React app (web/). Everything else under / is the API.
-SPA_ROUTES = ["/", "/schemes", "/schemes/engine", "/grievance", "/board", "/admin", "/admin/queue", "/agent", "/agent/history", "/agent/runs/{run_id}"]
+SPA_ROUTES = ["/", "/schemes", "/schemes/engine", "/grievance", "/board", "/admin", "/admin/queue", "/agent", "/agent/history", "/agent/runs/{run_id}", "/history", "/home", "/signin"]
 
 
 def spa_index() -> str:

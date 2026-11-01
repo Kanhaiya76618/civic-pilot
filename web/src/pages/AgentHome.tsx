@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { agent, api, runTokens, secs, type AgentRun, type Service } from "../api";
+import { agent, api, remember, runTokens, secs, type AgentRun, type Service } from "../api";
 import { ServiceForm } from "../components/ServiceForm";
 import { fadeUp, stagger, StatusBadge, useToast } from "../components/ui";
 
@@ -51,7 +51,7 @@ export default function AgentHome() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const toast = useToast();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => params.get("q") ?? "");  // from the home page's quick-ask box
   const [busy, setBusy] = useState(false);
   const [runs, setRuns] = useState<AgentRun[] | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -74,6 +74,7 @@ export default function AgentHome() {
     try {
       const r = await agent.start(q);
       runTokens.set(r.run_id, r.token);
+      remember({ kind: "agent", title: q.slice(0, 200), subtitle: "Agent console", link: r.path, meta: { run_id: r.run_id } });
       nav(r.path);
     } catch (err) {
       toast("error", (err as Error).message);

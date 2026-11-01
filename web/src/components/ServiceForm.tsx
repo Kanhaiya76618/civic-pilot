@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { BadgeCheck, CircleAlert, FileText, KeyRound, LoaderCircle, MapPin, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type InputDef, type Service } from "../api";
+import { api, remember, type InputDef, type Service } from "../api";
 import { Button, useToast } from "./ui";
 
 type Props = {
@@ -115,6 +115,10 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
       const r = await api.start({ portal_id: service.portal_id, service_id: service.service_id, inputs, private: privateFields, consent, mode, strategy, language: navigator.language }, fileList);
       toast("ok", "Started. Watch the agent work.");
       await Promise.resolve(onStarted?.(r)).catch(() => {});
+      remember({
+        kind: service.read_only ? "lookup" : service.service_id === "public_grievance" ? "report" : "filing",
+        title: service.description, subtitle: service.portal_name, link: r.citizen_path, meta: { task_id: r.task_id },
+      });
       nav(r.citizen_path);
     } catch (err) {
       toast("error", (err as Error).message);

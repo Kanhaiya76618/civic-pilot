@@ -3,6 +3,7 @@ import { ArrowRight, Bot, CheckCircle2, ClipboardCheck, FileCheck2, MapPinned, S
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Run } from "../api";
+import { NewsPanel } from "../components/HomeWidgets";
 import { AgentArt, KnowArt, ReportArt } from "../components/Illustrations";
 import { Badge, Card, CountUp, fadeUp, stagger } from "../components/ui";
 
@@ -66,6 +67,9 @@ export default function Landing() {
 
     <LiveSignal />
 
+    <section className="mx-auto max-w-7xl px-4 pt-16 sm:pt-20" aria-label="Latest news">
+      <NewsPanel canSave={false} />
+    </section>
     <section className="mx-auto max-w-7xl px-4 py-16 sm:py-20" aria-labelledby="people-title">
       <div className="grid gap-7 lg:grid-cols-[.9fr_1.1fr] lg:items-end"><div><Badge tone="leaf">The work is human</Badge><h2 id="people-title" className="mt-4 text-4xl font-extrabold text-navy-900">Built around the people who report, respond and repair.</h2><p className="mt-3 max-w-xl text-lg leading-8 text-slate-600">A good civic system keeps the citizen visible, gives field teams a clearer brief and lets service desks show what actually changed.</p></div><figure className="overflow-hidden rounded-3xl bg-white shadow-[0_16px_35px_-24px_rgb(19_48_107/.42)] ring-1 ring-navy-100"><img src="/images/civic-reporting-repair.webp" loading="lazy" decoding="async" alt="Resident documenting a street repair while a field crew works nearby" className="aspect-[16/9] w-full object-cover" /><figcaption className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="font-semibold text-navy-900">Report → verify → repair</span><span className="text-slate-500">Illustrative Swayam-sevak workflow</span></figcaption></figure></div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

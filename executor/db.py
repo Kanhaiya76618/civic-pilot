@@ -54,6 +54,17 @@ CREATE TABLE IF NOT EXISTS runs (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS history (
+    entry_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    subtitle TEXT,
+    link TEXT,
+    meta_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS history_user ON history(user_id, created_at);
 CREATE TABLE IF NOT EXISTS run_steps (
     run_id TEXT NOT NULL,
     step_no INTEGER NOT NULL,
@@ -258,6 +269,32 @@ class Store:
         """Console runs live in memory; after a restart, any that were mid-flight are marked stopped."""
         self._exec("UPDATE runs SET status='stopped', error='server restarted during this run', updated_at=? "
                    "WHERE status NOT IN ('completed','failed','stopped','out_of_scope','handed_off','needs_details')", (now_iso(),))
+
+    # per-account history (titles and links only, never private details) ---
+    def add_history(self, entry_id: str, user_id: str, kind: str, title: str, subtitle: str | None, link: str | None, meta: dict) -> dict:
+        ts = now_iso()
+        self._exec("INSERT INTO history VALUES (?,?,?,?,?,?,?,?)", (entry_id, user_id, kind, title, subtitle, link, json.dumps(meta), ts))
+        return {"id": entry_id, "kind": kind, "title": title, "subtitle": subtitle, "link": link, "meta": meta, "created_at": ts}
+
+    def list_history(self, user_id: str, kind: str | None = None, limit: int = 100) -> list[dict]:
+        sql, args = "SELECT * FROM history WHERE user_id=?", [user_id]
+        if kind:
+            sql += " AND kind=?"
+            args.append(kind)
+        rows = self._all(sql + " ORDER BY created_at DESC LIMIT ?", (*args, limit))
+        return [{"id": r["entry_id"], "kind": r["kind"], "title": r["title"], "subtitle": r["subtitle"], "link": r["link"],
+                 "meta": json.loads(r["meta_json"]), "created_at": r["created_at"]} for r in rows]
+
+    def delete_history(self, user_id: str, entry_id: str | None = None, kind: str | None = None) -> int:
+        if entry_id:
+            return self._exec("DELETE FROM history WHERE user_id=? AND entry_id=?", (user_id, entry_id)).rowcount
+        if kind:
+            return self._exec("DELETE FROM history WHERE user_id=? AND kind=?", (user_id, kind)).rowcount
+        return self._exec("DELETE FROM history WHERE user_id=?", (user_id,)).rowcount
+
+    def history_has(self, user_id: str, kind: str, link: str) -> dict | None:
+        row = self._one("SELECT entry_id FROM history WHERE user_id=? AND kind=? AND link=?", (user_id, kind, link))
+        return {"id": row["entry_id"]} if row else None
 
     # flags (kill switch) ---------------------------------------------------
     def set_flag(self, name: str, value: Any) -> None:
