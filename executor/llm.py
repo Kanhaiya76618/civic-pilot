@@ -8,6 +8,7 @@ Providers (CIVIC_LLM_PROVIDER):
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
@@ -29,7 +30,7 @@ class LLMResult:
 
 
 class LLM(Protocol):
-    async def decide(self, system: str, user: str, schema: dict) -> LLMResult: ...
+    async def decide(self, system: str, user: str, schema: dict, max_tokens: int = 4000, images: list[bytes] | None = None) -> LLMResult: ...
 
 
 def log_request(body: dict) -> None:
@@ -53,15 +54,21 @@ class ClaudeLLM:
             self.model = model
         self.effort = effort or settings.llm_effort
 
-    async def decide(self, system: str, user: str, schema: dict) -> LLMResult:
+    async def decide(self, system: str, user: str, schema: dict, max_tokens: int = 4000, images: list[bytes] | None = None) -> LLMResult:
+        """images: JPEG pages (e.g. a scanned notice), sent before the text."""
+        content: Any = user
+        if images:
+            content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(i).decode()}}
+                       for i in images] + [{"type": "text", "text": user}]
         request: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": 4000,
+            "max_tokens": max_tokens,
             "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "messages": [{"role": "user", "content": content}],
             "output_config": {"effort": self.effort, "format": {"type": "json_schema", "schema": schema}},
         }
-        log_request(request)
+        logged = request if not images else {**request, "messages": [{"role": "user", "content": [f"<{len(images)} page image(s)>", user]}]}
+        log_request(logged)
         start = time.monotonic()
         try:
             if self.provider == "anthropic":
@@ -96,7 +103,7 @@ class ScriptedLLM:
         self.decisions = list(decisions)
         self.requests: list[dict] = []
 
-    async def decide(self, system: str, user: str, schema: dict) -> LLMResult:
+    async def decide(self, system: str, user: str, schema: dict, max_tokens: int = 4000, images: list[bytes] | None = None) -> LLMResult:
         body = {"model": "scripted", "system": system, "messages": [{"role": "user", "content": user}]}
         self.requests.append(body)
         log_request(body)

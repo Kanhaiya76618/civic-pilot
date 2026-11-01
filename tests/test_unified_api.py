@@ -24,7 +24,7 @@ def test_app_config_and_health(client):
     res = client.get("/app/config")
     assert res.status_code == 200
     data = res.json()
-    assert data["part1_connected"] is True
+    assert data["part1_connected"] is bool(data["ai_available"])  # the built-in explainer needs a model
     assert data["part2_connected"] is True
 
 def test_auth_demo_login(client):

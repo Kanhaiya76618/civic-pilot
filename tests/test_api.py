@@ -161,9 +161,9 @@ async def test_public_console_endpoints(api):
         for route in ["/schemes", "/schemes/engine", "/grievance", "/board", "/agent"]:
             assert (await c.get(route)).status_code == 200
         cfg = (await c.get("/app/config")).json()
-        assert cfg["part1_connected"] is False and cfg["part2_connected"] is False
-        assert (await c.post("/app/part1/api/explain", json={"question": "x"})).status_code == 503  # honest "not connected"
-        assert (await c.get("/app/part2/api/public/stats")).status_code == 503
+        # Part 1 is built in but needs a model (none in tests); Part 2 is built in.
+        assert cfg["part1_connected"] is False and cfg["part2_connected"] is True
+        assert (await c.post("/app/part1/api/explain", json={"question": "x"})).status_code == 400  # no document: refused, nothing invented
         services = (await c.get("/app/services")).json()
         assert {s["service_id"] for s in services} >= {"find_schemes", "public_grievance"}
         assert all(s["public_demo"] for s in services)

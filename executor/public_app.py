@@ -45,6 +45,8 @@ def spa_index() -> str:
 def mount_spa(app: FastAPI) -> None:
     if (WEB_DIST / "assets").exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
+    if (WEB_DIST / "images").exists():  # the pages' illustrations (web/public/images)
+        app.mount("/images", StaticFiles(directory=WEB_DIST / "images"), name="images")
     for name in ("logo.svg", "favicon.svg"):
         if (WEB_DIST / name).exists():
             app.add_api_route(f"/{name}", lambda name=name: Response((WEB_DIST / name).read_bytes(), media_type="image/svg+xml"),
@@ -71,7 +73,7 @@ def make_router(ex: Callable) -> APIRouter:
     @r.get("/app/config")
     async def config():
         return {
-            "part1_connected": True,
+            "part1_connected": bool(settings.part1_api_url) or bool(ex().llm),  # built-in explainer needs a model
             "part2_connected": True,
             "ai_available": bool(ex().llm),
             "sandbox_url_internal": bool(settings.sandbox_url),

@@ -6,15 +6,15 @@ import { api, secs, type AppConfig } from "../api";
 import { Badge, Card, NotConnected } from "../components/ui";
 
 /** Part 1 contract: GET /api/pipeline/latest -> {question?, nodes: [{id, status: idle|running|done|error, ms?}]}. */
-type NodeState = { id: string; status: "idle" | "running" | "done" | "error"; ms?: number };
+type NodeState = { id: string; status: "idle" | "running" | "done" | "error"; ms?: number; note?: string };
 
 const NODES: { id: string; label: string; icon: LucideIcon; body: string; x: number; y: number }[] = [
-  { id: "ingest", label: "Ingest notice", icon: FileText, body: "Gazette PDF, scheme page or municipal order", x: 8, y: 22 },
-  { id: "parse", label: "Parse & OCR", icon: ScanText, body: "Text, tables and Hindi script", x: 31, y: 22 },
-  { id: "chunk", label: "Chunk", icon: BookOpen, body: "Clauses with their section numbers", x: 54, y: 22 },
-  { id: "embed", label: "Embed & index", icon: Database, body: "Searchable by meaning", x: 77, y: 22 },
-  { id: "retrieve", label: "Retrieve", icon: Search, body: "Only the clauses that answer the question", x: 77, y: 70 },
-  { id: "reason", label: "Explain with sources", icon: Brain, body: "Rights, eligibility, impact, with citations", x: 54, y: 70 },
+  { id: "ingest", label: "Ingest notice", icon: FileText, body: "A .gov.in link, a PDF or pasted text", x: 8, y: 22 },
+  { id: "parse", label: "Parse", icon: ScanText, body: "Text page by page; scans are read by the AI from page images", x: 31, y: 22 },
+  { id: "chunk", label: "Chunk", icon: BookOpen, body: "Pieces that keep their page number", x: 54, y: 22 },
+  { id: "embed", label: "Embed", icon: Database, body: "Not used: documents fit the model, long ones use keyword ranking", x: 77, y: 22 },
+  { id: "retrieve", label: "Retrieve", icon: Search, body: "The parts that matter for the question", x: 77, y: 70 },
+  { id: "reason", label: "Explain with quotes", icon: Brain, body: "Rights, eligibility, impact; each quote checked against the document", x: 54, y: 70 },
   { id: "translate", label: "Translate", icon: Languages, body: "Into the citizen's language", x: 31, y: 70 },
   { id: "voice", label: "Voice", icon: Volume2, body: "A short spoken explainer", x: 8, y: 70 },
 ];
@@ -69,6 +69,7 @@ export default function Engine() {
                 </div>
                 <p className="mt-1.5 hidden text-xs text-slate-300 sm:block">{n.body}</p>
                 <div className="mt-1.5 font-mono text-[11px] text-slate-400">{s?.ms != null ? secs(s.ms) : s?.status === "running" ? "working…" : "idle"}</div>
+                {s?.note && <div className="mt-0.5 hidden font-mono text-[10.5px] text-amber-200/80 sm:block">{s.note}</div>}
               </motion.div>
             );
           })}

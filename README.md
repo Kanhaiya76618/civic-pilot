@@ -76,12 +76,22 @@ flowchart TD
 - **Critical Infrastructure Multiplier:** Proximity to schools, hospitals, transit hubs, and flyovers applies a $1.2\times - 1.6\times$ priority multiplier, automatically elevating routine issues near emergency zones to $P1$.
 
 ### 3. Assisted Execution Agent & Cryptographic Receipts
-- **Playwright Loop with Live CDP Screencast:** Drives real government portals (myScheme, CPGRAMS, BBMP Sahaaya) with real-time frame streaming.
+- **Playwright Loop with Live CDP Screencast:** Reads the live myScheme portal and files on our sandbox replica, with real-time frame streaming. CPGRAMS and RTI Online are registered but locked until a genuine filing is agreed.
 - **Strict Domain Allowlist:** Agent can never navigate off allow-listed public portals.
 - **Typed-Words Rule:** Prevents injection attacks; the agent only types keywords from the citizen's request or official choices.
 - **Human-in-the-Loop Checkpoints:** Citizen handles OTP, CAPTCHA, and gives final consent before submission.
 - **Tamper-Evident Cryptographic Ledger:** Every submission generates an Ed25519 digital signature and links into a hash chain:
   $$\text{ticket\_hash} = \text{SHA256}(\text{canonical\_json}(\text{payload}) \parallel \text{prev\_hash})$$
+
+### 4. Rights & Policy Explainer (`/schemes`, Part 1)
+- **Any official document in:** a `.gov.in`/`.nic.in` link, a PDF, or pasted text (notifications, policy drafts, scheme guidelines, municipal orders).
+- **Plain answers out, in 12 Indian languages:** the direct answer, rights, who is eligible (yes / no / unknown against the citizen's own facts), what changes for citizens and for small businesses, deadlines and what to do, plus a spoken explainer (`openai/tts-1` via AIML API).
+- **Quote-checked:** every point carries a quote from the document; code keeps it only if the quote is in the text, and shows its page.
+- **Measured 1 Nov 2026:** myScheme disability-pension page → Hindi, 40 s; same → Tamil with audio, 53 s; PMSBY rules PDF (jansuraksha.gov.in) → Marathi with audio, 49 s. Two model calls each.
+- **Scans and Indian-script PDFs:** scanned PDFs, and PDFs mostly in an Indian script (whose text layers are often garbled by old font encodings), are read by Claude from page images (first 12 pages). Measured: the Hindi PMJJBY rules PDF → English in 41 s, Bengali in 36 s, with clean Hindi quotes.
+- **Links to the agent:** when the document matches a service the agent runs, the page offers it (e.g. the live myScheme finder).
+- **Cost guard:** model-backed runs are capped per visitor and overall per hour (`CIVIC_EXPLAINS_PER_HOUR`, `CIVIC_EXPLAINS_GLOBAL_PER_HOUR`); cached answers are free.
+- **Not yet:** pages beyond the 12th of a scanned PDF; long documents use keyword ranking, not embeddings.
 
 ---
 
