@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, BookOpen, Bot, CalendarClock, CircleCheck, CircleX, ClipboardPaste, ExternalLink, FileUp, Info, Link2, ListChecks, LoaderCircle, Mic, Pause, Scale, ScanText, Search, ShieldCheck, Square, Store, UserCheck, Users, Volume2, Workflow } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowRight, BookOpen, Bot, CalendarClock, CircleCheck, CircleX, ClipboardPaste, ExternalLink, FileUp, Info, Link2, Languages, ListChecks, LoaderCircle, Mic, Pause, Scale, ScanText, Search, ShieldCheck, Square, Store, UserCheck, Users, Volume2, Workflow } from "lucide-react";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type AppConfig, type Service } from "../api";
 import { ServiceForm } from "../components/ServiceForm";
@@ -29,33 +29,72 @@ type Explanation = {
   eligibility: { criterion: string; met: boolean | null; note?: string; quote?: string; page?: number | null }[];
   citations?: { title: string; reference?: string; date?: string; url?: string }[];
   voice_script: string; audio_url?: string | null; voice_provider: string;
-  dropped_unverified: number; untranslated: number; timing?: { ms: number; ai_calls: number }; cached?: boolean;
+  language_from_question?: boolean; dropped_unverified: number; untranslated: number; timing?: { ms: number; ai_calls: number }; cached?: boolean; labels?: Partial<Labels>;
   apply?: { portal_id: string; service_id: string; label?: string; description?: string } | null;
 };
 type Stage = { id: string; status: string; ms?: number; note?: string };
+
+// Headings come back translated with the answer; these are the English fallbacks.
+const LABELS = {
+  your_question: "Your question", in_short: "In short", rights: "Your rights", eligible: "Who is eligible",
+  citizens: "What changes for citizens", business: "What changes for small businesses", deadlines: "Dates and deadlines",
+  what_to_do: "What to do", from_document: "From the document", page: "page", listen: "Listen to this", playing: "Playing…",
+  no_rights: "The document states no specific rights.", no_business: "This document does not affect shops, MSMEs or employers.",
+  checked: "Every point above quotes the document, and each quote was checked against its text.",
+};
+type Labels = typeof LABELS;
+const LabelsCtx = createContext<Labels>(LABELS);
+const useL = () => useContext(LabelsCtx);
 const STAGE_LABEL: Record<string, string> = {
   ingest: "Reading", parse: "Text", chunk: "Pieces", embed: "Embed", retrieve: "Relevant parts", reason: "Explaining", translate: "Translating", voice: "Voice",
 };
 
-function useSpeechInput(lang: string, onText: (t: string) => void) {
-  const [listening, setListening] = useState(false);
-  const rec = useRef<any>(null);
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const start = () => {
-    if (!SR) return false;
-    const r = new SR();
-    r.lang = lang; r.interimResults = false; r.maxAlternatives = 1;
-    r.onresult = (e: any) => onText(e.results[0][0].transcript);
-    r.onend = () => setListening(false);
-    r.onerror = () => setListening(false);
-    rec.current = r; r.start(); setListening(true);
-    return true;
-  };
-  const stop = () => { rec.current?.stop(); setListening(false); };
-  return { supported: !!SR, listening, start, stop };
+/** Records a spoken question in the page (works on Android, iPhone and desktop browsers) and turns it into text on the
+ * server (Whisper via AIML API). Without a chosen language the server detects it, and the answer then follows it. */
+function useVoiceQuestion(lang: string | null, onText: (text: string, language: string | null) => void, onError: (m: string) => void) {
+  const [state, setState] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [seconds, setSeconds] = useState(0);
+  const rec = useRef<MediaRecorder | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const supported = typeof window !== "undefined" && "MediaRecorder" in window && !!navigator.mediaDevices?.getUserMedia;
+
+  async function start() {
+    let stream: MediaStream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { onError("Microphone permission is needed to ask by voice."); return; }
+    const chunks: Blob[] = [];
+    const r = new MediaRecorder(stream);
+    r.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    r.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(timer.current);
+      const blob = new Blob(chunks, { type: r.mimeType || "audio/webm" });
+      if (blob.size < 1000) { setState("idle"); return; }
+      setState("transcribing");
+      const fd = new FormData();
+      fd.append("audio", blob, "question");
+      if (lang) fd.append("language", lang);
+      try {
+        const res = await fetch("/app/part1/api/transcribe", { method: "POST", body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Could not understand the recording");
+        if (body.text) onText(body.text, body.language ?? null); else onError("No speech was heard. Please try again.");
+      } catch (e) { onError((e as Error).message); }
+      setState("idle");
+    };
+    rec.current = r; r.start(); setSeconds(0); setState("recording");
+    timer.current = window.setInterval(() => setSeconds((x) => {
+      if (x + 1 >= 30) rec.current?.state === "recording" && rec.current.stop();  // keep questions short
+      return x + 1;
+    }), 1000);
+  }
+  const stop = () => { if (rec.current?.state === "recording") rec.current.stop(); };
+  useEffect(() => () => { clearInterval(timer.current); if (rec.current?.state === "recording") rec.current.stop(); }, []);
+  return { supported, state, seconds, start, stop };
 }
 
 function VoiceExplainer({ text, lang, audioUrl }: { text: string; lang: string; audioUrl?: string | null }) {
+  const L = useL();
   const [playing, setPlaying] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   useEffect(() => () => { speechSynthesis.cancel(); audio.current?.pause(); }, []);
@@ -71,7 +110,7 @@ function VoiceExplainer({ text, lang, audioUrl }: { text: string; lang: string; 
     <button onClick={toggle} className="group flex items-center gap-3 rounded-2xl bg-navy-700 px-4 py-3 text-left text-white shadow-lg hover:bg-navy-800" aria-pressed={playing}>
       <span className="grid size-10 place-items-center rounded-full bg-saffron-500 text-navy-900">{playing ? <Pause className="size-5" /> : <Volume2 className="size-5" />}</span>
       <span>
-        <span className="block text-sm font-bold">{playing ? "Playing…" : "Listen to this"}</span>
+        <span className="block text-sm font-bold">{playing ? L.playing : L.listen}</span>
         <span className="flex h-4 items-end gap-0.5" aria-hidden>
           {Array.from({ length: 18 }).map((_, i) => (
             <motion.span key={i} className="w-1 rounded-full bg-saffron-300" animate={playing ? { height: [4, 6 + ((i * 7) % 10), 4] } : { height: 4 }}
@@ -84,11 +123,12 @@ function VoiceExplainer({ text, lang, audioUrl }: { text: string; lang: string; 
 }
 
 function Quote({ p }: { p: { quote?: string; page?: number | null } }) {
+  const L = useL();
   if (!p.quote) return null;
   return (
     <details className="group mt-1">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-navy-500 hover:text-navy-800">
-        <BookOpen className="size-3.5" />From the document{p.page ? `, page ${p.page}` : ""}
+        <BookOpen className="size-3.5" />{L.from_document}{p.page ? `, ${L.page} ${p.page}` : ""}
       </summary>
       <blockquote className="mt-1 border-l-4 border-saffron-300 bg-saffron-50/60 px-3 py-1.5 text-sm italic text-slate-700">“{p.quote}”</blockquote>
     </details>
@@ -110,8 +150,10 @@ function Points({ title, items, icon, empty }: { title: string; items: Point[]; 
 }
 
 function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
+  const L = { ...LABELS, ...(ex.labels ?? {}) };
   return (
-    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+    <LabelsCtx.Provider value={L}>
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="space-y-5" lang={lang.split("-")[0]} dir={lang === "ur-IN" ? "rtl" : undefined}>
       <Card variant="plain" className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -125,11 +167,16 @@ function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
           </div>
         </div>
         <div className="mt-5 rounded-2xl bg-navy-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-navy-600">Your question</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-navy-600">{L.your_question}</p>
           <p className="text-sm text-slate-700">{ex.question}</p>
+          {ex.language_from_question && (
+            <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-navy-700 ring-1 ring-navy-100">
+              <Languages className="size-3.5" />{LANGS.find((x) => x.code === ex.language)?.label}
+            </p>
+          )}
           <p className="mt-3 whitespace-pre-line text-lg leading-relaxed text-slate-900">{ex.answer}</p>
         </div>
-        <p className="mt-4 leading-relaxed text-slate-700"><span className="font-bold text-navy-800">In short: </span>{ex.summary}</p>
+        <p className="mt-4 leading-relaxed text-slate-700"><span className="font-bold text-navy-800">{L.in_short}: </span>{ex.summary}</p>
         {ex.doc.ocr && (
           <p className="mt-3 flex items-start gap-2 rounded-xl bg-saffron-50 px-3 py-2 text-sm text-saffron-800 ring-1 ring-saffron-200">
             <ScanText className="mt-0.5 size-4 shrink-0" />{ex.doc.ocr.reason === "indian_script" ? "This PDF's built-in text in an Indian script is often garbled, so" : "This was a scanned document, so"} the AI read {ex.doc.ocr.pages_read} of its {ex.doc.ocr.pages_total} page(s) from the page images. Quotes are checked against that reading: compare important figures with the original.
@@ -143,10 +190,10 @@ function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Points title="Your rights" items={ex.rights} icon={<Scale className="size-5 text-saffron-600" />} empty="The document states no specific rights." />
+        <Points title={L.rights} items={ex.rights} icon={<Scale className="size-5 text-saffron-600" />} empty={L.no_rights} />
         {ex.eligibility.length > 0 && (
           <Card variant="clay" className="p-5">
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><UserCheck className="size-5 text-leaf-600" />Who is eligible</h3>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><UserCheck className="size-5 text-leaf-600" />{L.eligible}</h3>
             <ul className="mt-3 space-y-3">
               {ex.eligibility.map((e, i) => (
                 <li key={i} className="flex items-start gap-2">
@@ -157,12 +204,12 @@ function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
             </ul>
           </Card>
         )}
-        <Points title="What changes for citizens" items={ex.impacts.citizens} icon={<Users className="size-5 text-navy-600" />} />
-        <Points title="What changes for small businesses" items={ex.impacts.business} icon={<Store className="size-5 text-navy-600" />} empty="This document does not affect shops, MSMEs or employers." />
-        <Points title="Dates and deadlines" items={ex.deadlines} icon={<CalendarClock className="size-5 text-red-600" />} />
+        <Points title={L.citizens} items={ex.impacts.citizens} icon={<Users className="size-5 text-navy-600" />} />
+        <Points title={L.business} items={ex.impacts.business} icon={<Store className="size-5 text-navy-600" />} empty={L.no_business} />
+        <Points title={L.deadlines} items={ex.deadlines} icon={<CalendarClock className="size-5 text-red-600" />} />
         {ex.how_to_act.length > 0 && (
           <Card variant="plain" className="p-5">
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><ListChecks className="size-5 text-leaf-600" />What to do</h3>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><ListChecks className="size-5 text-leaf-600" />{L.what_to_do}</h3>
             <ol className="mt-3 space-y-3">
               {ex.how_to_act.map((p, i) => (
                 <li key={i} className="flex gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-saffron-500 text-sm font-bold text-navy-900">{i + 1}</span><span className="min-w-0 text-slate-800">{p.text}<Quote p={p} /></span></li>
@@ -172,12 +219,13 @@ function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
         )}
       </div>
       <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-        <ShieldCheck className="size-4 text-leaf-600" />Every point above quotes the document, and each quote was checked against its text.
+        <ShieldCheck className="size-4 text-leaf-600" />{L.checked}
         {ex.dropped_unverified > 0 && <span>{ex.dropped_unverified} point(s) were dropped because their quote was not in the document.</span>}
         {ex.untranslated > 0 && <span>{ex.untranslated} line(s) are shown in English because translation missed them.</span>}
         {ex.timing && <span className="font-mono text-xs text-slate-500">{(ex.timing.ms / 1000).toFixed(0)} s · {ex.timing.ai_calls} AI calls{ex.cached ? " · reused" : ""}</span>}
       </p>
     </motion.div>
+    </LabelsCtx.Provider>
   );
 }
 
@@ -189,6 +237,8 @@ export default function Schemes() {
   const initialLanguage = searchParams.get("lang");
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [lang, setLang] = useState(() => LANGS.some((item) => item.code === initialLanguage) ? initialLanguage! : "hi-IN");
+  // Until the citizen picks a language, the answer follows the language of their question.
+  const [langPicked, setLangPicked] = useState(() => LANGS.some((item) => item.code === initialLanguage));
   const [mode, setMode] = useState<"link" | "pdf" | "text">("link");
   const [link, setLink] = useState(() => searchParams.get("url") ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -199,7 +249,10 @@ export default function Schemes() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [ex, setEx] = useState<Explanation | null>(null);
   const [notConnected, setNotConnected] = useState(false);
-  const speech = useSpeechInput(lang, (t) => setQ((x) => (x ? `${x} ${t}` : t)));
+  const voice = useVoiceQuestion(langPicked ? lang : null, (text, language) => {
+    setQ((x) => (x ? `${x} ${text}` : text));
+    if (!langPicked && language && LANGS.some((l) => l.code === language)) setLang(language);
+  }, (m) => toast("error", m));
   const sourceKey = mode === "link" ? `link:${link.trim()}` : mode === "pdf" ? `pdf:${file?.name}:${file?.size}` : `text:${pasted.length}:${pasted.slice(0, 80)}`;
 
   useEffect(() => {
@@ -229,14 +282,17 @@ export default function Schemes() {
     return body;
   }
 
-  async function explain(language = lang) {
+  async function explain(language = lang, picked = langPicked) {
     if (!config?.part1_connected) { setNotConnected(true); setEx(null); return; }
     const empty = mode === "link" ? !link.trim() : mode === "pdf" ? !file : pasted.trim().length < 200;
     if (empty) { toast("error", mode === "text" ? "Paste at least a paragraph of the notice." : "Add the notification: a link or a PDF."); return; }
     setBusy(true); setNotConnected(false); setStages([]);
     try {
       const d = await ingest();
-      setEx(await api.part1("api/explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doc_id: d.doc_id, question: q, language }) }));
+      const res: Explanation = await api.part1("api/explain", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doc_id: d.doc_id, question: q, language, auto_language: !picked && q.trim().length > 0 }) });
+      setEx(res);
+      if (res.language !== language) setLang(res.language);
     } catch (err) { toast("error", (err as Error).message); }
     setBusy(false);
   }
@@ -292,19 +348,25 @@ export default function Schemes() {
                 <Search className="ml-1 size-5 shrink-0 text-navy-400" aria-hidden />
                 <input id="q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. मैं 52 साल का दुकानदार हूँ, क्या मुझे यह मिलेगा?"
                   className="min-h-12 min-w-0 flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400" />
-                {speech.supported && (
-                  <button type="button" onClick={() => (speech.listening ? speech.stop() : speech.start())} aria-label={speech.listening ? "Stop listening" : "Speak your question"}
-                    className={`grid size-10 place-items-center rounded-xl ${speech.listening ? "pulse-ring bg-saffron-500 text-navy-900" : "bg-navy-50 text-navy-700 hover:bg-navy-100"}`}>
-                    {speech.listening ? <Square className="size-4" /> : <Mic className="size-5" />}
+                {voice.supported && (
+                  <button type="button" onClick={() => (voice.state === "recording" ? voice.stop() : voice.start())} disabled={voice.state === "transcribing"}
+                    aria-label={voice.state === "recording" ? "Stop recording" : "Ask by voice"}
+                    className={`inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-sm font-semibold ${voice.state === "recording" ? "pulse-ring bg-saffron-500 text-navy-900" : "bg-navy-50 text-navy-700 hover:bg-navy-100"} disabled:opacity-60`}>
+                    {voice.state === "recording" ? <><Square className="size-4" />{voice.seconds}s</> : voice.state === "transcribing" ? <LoaderCircle className="size-4 animate-spin" /> : <Mic className="size-5" />}
                   </button>
                 )}
               </div>
+              {voice.state !== "idle" && (
+                <p className="mt-1.5 text-xs font-semibold text-navy-600" role="status">
+                  {voice.state === "recording" ? "Listening… tap ■ when you finish (30 s max)." : "Writing down what you said… please check it before asking."}
+                </p>
+              )}
             </div>
             <div>
-              <p className="mb-2 text-sm font-bold text-navy-800">3. Your language</p>
+              <p className="mb-2 text-sm font-bold text-navy-800">3. Your language <span className="font-normal text-slate-500">{langPicked ? "" : "(or just ask in your language: we answer in it)"}</span></p>
               <div className="flex flex-wrap gap-1.5">
                 {LANGS.map((l) => (
-                  <button type="button" key={l.code} onClick={() => { setLang(l.code); if (ex && !busy) explain(l.code); }} aria-pressed={lang === l.code}
+                  <button type="button" key={l.code} onClick={() => { setLang(l.code); setLangPicked(true); if (ex && !busy) explain(l.code, true); }} aria-pressed={lang === l.code}
                     className={`rounded-full px-3 py-1 text-sm font-semibold ${lang === l.code ? "bg-navy-700 text-white" : "bg-white text-navy-700 ring-1 ring-navy-100 hover:ring-navy-300"}`}>{l.label}</button>
                 ))}
               </div>

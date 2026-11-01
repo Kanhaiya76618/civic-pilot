@@ -44,6 +44,9 @@ LANGUAGES = {
 DOC_SUFFIXES = (".gov.in", ".nic.in")
 MAX_BYTES = 15 * 1024 * 1024
 WHOLE_DOC_CHARS = 60_000
+STT_MODEL = "#g1_whisper-large"
+STT_MAX_WAIT_S = 45
+MAX_AUDIO_BYTES = 3 * 1024 * 1024  # about a minute of compressed speech; the page records at most 30 s
 DEFAULT_QUESTION = "What does this mean for me, and what are my rights?"
 NODES = ["ingest", "parse", "chunk", "embed", "retrieve", "reason", "translate", "voice"]
 transport: httpx.AsyncBaseTransport | None = None  # tests inject a MockTransport
@@ -110,6 +113,16 @@ Use everyday spoken words, not a formal or literary register. Keep scheme names,
 Return every item with its id unchanged. Then write voice_script: 120 to 180 words in {lang}, as one person explaining to a neighbour: what this is, who it helps, their rights, and what to do next. Only facts from the items. No markdown.
 Answer with a single JSON object that matches the schema."""
 
+
+# The page's own headings, translated in the same call as the answer so the whole page reads in one language.
+UI_LABELS = {
+    "your_question": "Your question", "in_short": "In short", "rights": "Your rights", "eligible": "Who is eligible",
+    "citizens": "What changes for citizens", "business": "What changes for small businesses", "deadlines": "Dates and deadlines",
+    "what_to_do": "What to do", "from_document": "From the document", "page": "page", "listen": "Listen to this",
+    "playing": "Playing…", "no_rights": "The document states no specific rights.",
+    "no_business": "This document does not affect shops, MSMEs or employers.",
+    "checked": "Every point above quotes the document, and each quote was checked against its text.",
+}
 
 # ------------------------------------------------------------------ helpers
 def norm(text: str) -> str:
@@ -379,14 +392,16 @@ class Explainer:
             await ctx.close()
 
     # explain ---------------------------------------------------------------
-    async def explain(self, doc_id: str, question: str, language: str) -> dict:
+    async def explain(self, doc_id: str, question: str, language: str, auto_language: bool = False) -> dict:
+        """auto_language: answer in the language the question is written in (the citizen did not pick one)."""
         llm = self.ex.llm
         if not llm:
             raise HTTPException(503, "The explainer needs an AI model: set AIMLAPI_KEY or ANTHROPIC_API_KEY.")
         doc = self.load(doc_id)
+        auto_language = auto_language and bool(question.strip())
         question = question.strip() or DEFAULT_QUESTION
         key = (doc_id, question, language)
-        if key in self._explained:
+        if key in self._explained and not auto_language:
             return {**self._explained[key], "cached": True}
         p = self.latest = Pipeline(question)
         started, calls = time.monotonic(), 0
@@ -406,8 +421,10 @@ class Explainer:
             services = self._services()
             listing = "\n".join(f"  - {sid}: {s['route'].description}" for sid, s in services.items()) or "  (none)"
             schema = {**REASON_SCHEMA, "properties": {**REASON_SCHEMA["properties"], "service": {
-                "type": "string", "enum": ["", *services], "description": "A SERVICE the citizen can use for this document, else empty"}},
-                "required": [*REASON_SCHEMA["required"], "service"]}
+                "type": "string", "enum": ["", *services], "description": "A SERVICE the citizen can use for this document, else empty"},
+                "question_language": {"type": "string", "enum": list(LANGUAGES), "description":
+                    "Language the QUESTION is written in. Hindi or another language typed in English letters counts as that language."}},
+                "required": [*REASON_SCHEMA["required"], "service", "question_language"]}
             out = await llm.decide(REASON_SYSTEM, f"QUESTION: {question}\n\nSERVICES our agent can run (set service only if the document is about it; "
                                    f"the eligibility finder fits any welfare scheme document):\n{listing}\n\n<document>\n{body}\n</document>",
                                    schema, max_tokens=8000)
@@ -418,6 +435,13 @@ class Explainer:
             data = self._verify(out.data, doc)
             self._reasoned[rkey] = data
             p.done("reason", note=f"{data['dropped_unverified']} unverified item(s) dropped")
+
+        detected = data.get("question_language")
+        if auto_language and detected in LANGUAGES and detected != language:
+            language = detected
+            if (doc_id, question, language) in self._explained:
+                return {**self._explained[(doc_id, question, language)], "cached": True}
+        key = (doc_id, question, language)
 
         p.start("translate")
         translated, script = await self._translate(data, language)
@@ -430,6 +454,7 @@ class Explainer:
 
         result = self._shape(doc, translated, language, script, audio_url, provider)
         result["apply"] = self._apply(data.get("service", ""))
+        result["language_from_question"] = bool(auto_language and detected == language)
         result["timing"] = {"ms": int((time.monotonic() - started) * 1000), "ai_calls": calls}
         result["question"] = question
         self._explained[key] = result
@@ -462,19 +487,23 @@ class Explainer:
                 flat[f"{field}.{i}.text"] = it["text"]
                 if field == "eligibility" and it.get("note"):
                     flat[f"{field}.{i}.note"] = it["note"]
+        flat.update({f"ui.{k}": v for k, v in UI_LABELS.items()})
         prompt = json.dumps({"items": [{"id": k, "text": v} for k, v in flat.items()]}, ensure_ascii=False)
         out = await self.ex.llm.decide(TRANSLATE_SYSTEM.format(lang=lang), prompt, TRANSLATE_SCHEMA, max_tokens=16000)
         if out.data is None:
             raise HTTPException(502, f"Translation failed: {out.error}")
         got = {i["id"]: i["text"] for i in out.data.get("items", []) if i.get("id") in flat}
         res = json.loads(json.dumps(data))
+        res["labels"] = {k: got.get(f"ui.{k}", v) for k, v in UI_LABELS.items()}
         for k, v in got.items():
+            if k.startswith("ui."):
+                continue
             parts = k.split(".")
             if len(parts) == 1:
                 res[k] = v
             else:
                 res[parts[0]][int(parts[1])][parts[2]] = v
-        res["untranslated"] = len(flat) - len(got)  # anything missing stays in English rather than disappearing
+        res["untranslated"] = sum(1 for k in flat if k not in got and not k.startswith("ui."))  # missing lines stay in English
         return res, out.data.get("voice_script", "")
 
     async def _voice(self, script: str) -> tuple[str | None, str]:
@@ -513,6 +542,34 @@ class Explainer:
             label = "Apply with the agent" + (" (sandbox replica)" if portal.is_sandbox else "")
         return {"portal_id": portal.portal_id, "service_id": route.service_id, "label": label, "description": route.description}
 
+    async def transcribe(self, audio: bytes, media_type: str, language: str | None) -> dict:
+        """A spoken question to text: Whisper (large) through AIML API's queued speech-to-text. The audio is not stored.
+        With no language given, the service detects it, and the answer can then follow it."""
+        key = os.environ.get("AIMLAPI_KEY")
+        if not key:
+            raise HTTPException(503, "Voice questions need AIMLAPI_KEY on the server.")
+        base, auth = settings.aimlapi_base_url.rstrip("/"), {"Authorization": f"Bearer {key}"}
+        form = {"model": STT_MODEL, **({"language": language.split("-")[0]} if language else {"detect_language": "true"})}
+        try:
+            async with httpx.AsyncClient(timeout=30, transport=transport) as c:
+                r = await c.post(f"{base}/v1/stt/create", headers=auth, data=form, files={"audio": ("question", audio, media_type)})
+                r.raise_for_status()
+                job = r.json()["generation_id"]
+                deadline = time.monotonic() + STT_MAX_WAIT_S
+                while time.monotonic() < deadline:
+                    await asyncio.sleep(1.0)
+                    d = (await c.get(f"{base}/v1/stt/{job}", headers=auth)).json()
+                    if d.get("status") == "completed":
+                        ch = d["result"]["results"]["channels"][0]
+                        detected = ch.get("detected_language") or (language or "").split("-")[0]
+                        code = f"{detected}-IN" if f"{detected}-IN" in LANGUAGES else None
+                        return {"text": ch["alternatives"][0]["transcript"].strip(), "language": code}
+                    if d.get("status") not in {"queued", "generating"}:
+                        raise HTTPException(502, "Speech recognition failed. Please type your question.")
+        except (httpx.HTTPError, KeyError, ValueError, IndexError):
+            raise HTTPException(502, "Speech recognition is unavailable right now. Please type your question.")
+        raise HTTPException(504, "Speech recognition took too long. Please try a shorter question, or type it.")
+
     @staticmethod
     def _shape(doc: dict, d: dict, language: str, script: str, audio_url: str | None, provider: str) -> dict:
         def lst(field: str) -> list[dict]:
@@ -530,7 +587,7 @@ class Explainer:
             "eligibility": [{"criterion": it["text"], "met": met.get(it.get("met")), "note": it.get("note"), "quote": it["quote"], "page": it.get("page")}
                             for it in d.get("eligibility", [])],
             "citations": [{"title": doc["title"], "reference": d.get("issuer") or None, "date": d.get("date") or None, "url": doc.get("url")}],
-            "voice_script": script, "audio_url": audio_url, "voice_provider": provider,
+            "voice_script": script, "audio_url": audio_url, "voice_provider": provider, "labels": d.get("labels", UI_LABELS),
             "dropped_unverified": d.get("dropped_unverified", 0), "untranslated": d.get("untranslated", 0),
         }
 
@@ -540,6 +597,7 @@ class ExplainIn(BaseModel):
     doc_id: str = ""
     question: str = Field("", max_length=600)
     language: str = "hi-IN"
+    auto_language: bool = False  # answer in the question's own language
 
 
 def make_explainer_router(ex: Callable[[], "Executor"]) -> APIRouter:
@@ -599,9 +657,24 @@ def make_explainer_router(ex: Callable[[], "Executor"]) -> APIRouter:
         if not body.doc_id:
             raise HTTPException(400, "Add the notification first (a link, a PDF or the text): explanations come only from the document.")
         s = svc()
-        if (body.doc_id, body.question.strip() or DEFAULT_QUESTION, body.language) not in s._explained:
+        if body.auto_language or (body.doc_id, body.question.strip() or DEFAULT_QUESTION, body.language) not in s._explained:
             limiter(request)()  # cached answers are free
-        return await s.explain(body.doc_id, body.question, body.language)
+        return await s.explain(body.doc_id, body.question, body.language, body.auto_language)
+
+    @r.post("/transcribe")
+    async def transcribe(request: Request, audio: UploadFile = File(...), language: str = Form("")):
+        data = await audio.read()
+        if not data:
+            raise HTTPException(400, "no audio")
+        if len(data) > MAX_AUDIO_BYTES:
+            raise HTTPException(413, "That recording is too long. Please ask in under 30 seconds.")
+        media = (audio.content_type or "").split(";")[0]
+        if not media.startswith(("audio/", "video/webm", "video/mp4")):
+            raise HTTPException(415, "send an audio recording")
+        if language and language not in LANGUAGES:
+            raise HTTPException(400, f"language must be one of {sorted(LANGUAGES)}")
+        limiter(request)()
+        return await svc().transcribe(data, media, language or None)
 
     @r.get("/pipeline/latest")
     async def pipeline():

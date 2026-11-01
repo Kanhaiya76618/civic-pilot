@@ -196,3 +196,65 @@ async def test_runs_are_limited_per_visitor(monkeypatch, tmp_path):
             assert again.status_code == 200 and again.json()["cached"] is True  # a cached answer costs nothing
     finally:
         E.transport = None
+
+
+async def test_headings_are_translated_with_the_answer(svc):
+    doc = svc._save("Widow pension", "pasted_text", None, [NOTICE])
+    out = await svc.explain(doc["doc_id"], "", "ta-IN")
+    assert out["labels"]["rights"] == "HI:Your rights" and out["labels"]["what_to_do"] == "HI:What to do"
+    assert out["untranslated"] == 1  # only the content line the fake skipped; headings are not counted
+
+
+class LangLLM(FakeLLM):
+    async def decide(self, system, user, schema, max_tokens=4000, images=None):
+        out = await super().decide(system, user, schema, max_tokens)
+        if system == E.REASON_SYSTEM:
+            assert "question_language" in schema["properties"]
+            out.data["question_language"] = "ta-IN"
+        return out
+
+
+async def test_answer_follows_the_question_language_only_when_not_chosen(svc):
+    svc.ex.llm = LangLLM()
+    doc = svc._save("Widow pension", "pasted_text", None, [NOTICE])
+    auto = await svc.explain(doc["doc_id"], "எனக்கு ஓய்வூதியம் கிடைக்குமா?", "hi-IN", auto_language=True)
+    assert auto["language"] == "ta-IN" and auto["language_from_question"] is True
+    chosen = await svc.explain(doc["doc_id"], "எனக்கு ஓய்வூதியம் கிடைக்குமா?", "hi-IN")
+    assert chosen["language"] == "hi-IN" and chosen["language_from_question"] is False
+
+
+def stt_service(captured: list):
+    def handler(request: httpx.Request):
+        if request.url.path.endswith("/v1/stt/create"):
+            captured.append(request.content)
+            return httpx.Response(201, json={"generation_id": "job1", "status": "queued"})
+        if request.url.path.endswith("/v1/stt/job1"):
+            return httpx.Response(200, json={"status": "completed", "result": {"results": {"channels": [
+                {"detected_language": "ta", "alternatives": [{"transcript": " எனக்கு ஓய்வூதியம் கிடைக்குமா "}]}]}}})
+        return httpx.Response(404)
+    return httpx.MockTransport(handler)
+
+
+async def test_voice_question_is_transcribed_and_its_language_found(svc):
+    sent: list = []
+    E.transport = stt_service(sent)
+    detected = await svc.transcribe(b"\x1aE\xdf\xa3" + b"0" * 2000, "audio/webm", None)
+    assert detected == {"text": "எனக்கு ஓய்வூதியம் கிடைக்குமா", "language": "ta-IN"}
+    assert b"detect_language" in sent[-1] and b"#g1_whisper-large" in sent[-1]
+    await svc.transcribe(b"0" * 2000, "audio/webm", "hi-IN")
+    assert b'name="language"\r\n\r\nhi' in sent[-1] and b"detect_language" not in sent[-1]
+
+
+async def test_voice_question_needs_a_key_and_short_audio(svc, monkeypatch, tmp_path):
+    monkeypatch.delenv("AIMLAPI_KEY")
+    with pytest.raises(HTTPException) as e:
+        await svc.transcribe(b"0" * 2000, "audio/webm", None)
+    assert e.value.status_code == 503
+    from fastapi import FastAPI
+    app = FastAPI()
+    app.include_router(E.make_explainer_router(lambda: svc.ex))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+        big = await c.post("/app/part1/api/transcribe", files={"audio": ("q", b"0" * (E.MAX_AUDIO_BYTES + 1), "audio/webm")})
+        assert big.status_code == 413
+        wrong = await c.post("/app/part1/api/transcribe", files={"audio": ("q", b"0" * 2000, "text/plain")})
+        assert wrong.status_code == 415
