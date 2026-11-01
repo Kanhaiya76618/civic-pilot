@@ -137,6 +137,17 @@ Citizen registration and sign-in use Supabase Auth with email and password. In t
 
 Municipal accounts cannot self-register from the portal. Create or invite the officer in Supabase Auth, then give the matching Swayam-sevak profile the `admin` role. The seeded `admin@demo.in` record remains only an automated-test fixture; it is not a public municipal credential.
 
+### 2b. Configure the Civic Guide
+
+The signed-in home page includes an official-source civic guide for questions about banking, land, tax, consumer matters, work, and related civic issues. Create a **new** Groq key and add it only to the server environment (never `VITE_*`, browser code, or version control):
+
+```bash
+GROQ_API_KEY=replace-with-a-fresh-server-only-key
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+For each question, the server retrieves allow-listed official Indian government or regulator pages before asking the model to write an answer. If it cannot retrieve those sources, it declines to give a substantive answer.
+
 ### 3. Seed Live Database (Idempotent)
 Populates demo users, 18 realistic ward reports, an SLA breach, a deduplicated pair, and a signed receipt:
 ```bash

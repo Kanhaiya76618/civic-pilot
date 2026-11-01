@@ -1,10 +1,11 @@
 import { motion } from "motion/react";
 import { ArrowRight, Bot, FileSearch, Flame, Hand, KeyRound, Map, MapPinned, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 import { me, type HistoryEntry, type News } from "../api";
 import { getAuthSession } from "../auth";
 import { NewsPanel, RecentActivity } from "../components/HomeWidgets";
+import { CivicGuideChat } from "../components/CivicGuideChat";
 import { fadeUp, stagger } from "../components/ui";
 
 const ACTIONS = [
@@ -16,68 +17,25 @@ const ACTIONS = [
 
 const card = "rounded-3xl bg-white shadow-[0_18px_44px_-30px_rgb(19_48_107/.45)] ring-1 ring-navy-100";
 
-function QuickAsk() {
-  const nav = useNavigate();
-  const [q, setQ] = useState("");
-  const go = (to: "explain" | "agent") => (e?: FormEvent) => {
-    e?.preventDefault();
-    const text = q.trim();
-    if (!text) return;
-    nav(to === "agent" ? `/agent?q=${encodeURIComponent(text)}` : `/schemes?q=${encodeURIComponent(text)}`);
-  };
-  return (
-    <form onSubmit={go("agent")} className="mt-6 rounded-2xl bg-white/10 p-2 ring-1 ring-white/20 backdrop-blur focus-within:ring-2 focus-within:ring-saffron-300">
-      <label htmlFor="quick-ask" className="sr-only">What do you need?</label>
-      <input id="quick-ask" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. Which pension can my mother get in Bihar?"
-        className="min-h-11 w-full bg-transparent px-3 text-base text-white outline-none placeholder:text-navy-200" />
-      <div className="mt-1 grid gap-2 sm:grid-cols-2">
-        <button type="submit" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-saffron-500 px-4 font-semibold text-navy-900 hover:bg-saffron-400">
-          <Bot className="size-4" />Ask the agent
-        </button>
-        <button type="button" onClick={go("explain")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white/10 px-4 font-semibold text-white ring-1 ring-white/25 hover:bg-white/15">
-          <FileSearch className="size-4" />Explain a document
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export default function CitizenHome() {
   const session = getAuthSession();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [trend, setTrend] = useState<{ terms: News["trending"]; pick: (t: string) => void } | null>(null);
-  useEffect(() => { if (session) me.history().then(setHistory).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!session) return;
+    me.history().then(setHistory).catch(() => {}).finally(() => setHistoryReady(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => ({
-    done: history.filter((h) => h.kind !== "news").length,
+    completed: history.filter((h) => ["explain", "lookup", "filing", "report", "agent"].includes(h.kind)).length,
     saved: history.filter((h) => h.kind === "news").length,
     week: history.filter((h) => Date.now() - new Date(h.created_at).getTime() < 7 * 864e5).length,
   }), [history]);
   if (!session || session.user.role !== "citizen") return <Navigate to="/signin?role=citizen" replace />;
-  const first = session.user.name.trim().split(/\s+/)[0] ?? "";
-  const firstName = first ? first[0].toUpperCase() + first.slice(1) : "there";
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:py-10">
-      {/* 1. Welcome band */}
-      <motion.section initial="hidden" animate="show" variants={stagger}
-        className="relative grid gap-6 overflow-hidden rounded-[2rem] bg-navy-800 p-6 text-white shadow-[0_24px_55px_-28px_rgb(19_48_107/.65)] sm:p-8 lg:grid-cols-12 lg:items-end">
-        <div className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full border-[40px] border-saffron-400/15" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-20 right-1/3 size-48 rounded-full border-[28px] border-leaf-500/20" aria-hidden />
-        <motion.div variants={fadeUp} className="relative lg:col-span-7">
-          <p className="text-sm font-semibold text-saffron-300">{today}</p>
-          <h1 className="mt-1 text-3xl font-extrabold leading-tight sm:text-4xl">Namaste, {firstName}. What do you need today?</h1>
-          <QuickAsk />
-        </motion.div>
-        <motion.dl variants={fadeUp} className="relative grid grid-cols-3 gap-3 lg:col-span-5">
-          {[[counts.done, "things done"], [counts.week, "this week"], [counts.saved, "saved news"]].map(([n, label]) => (
-            <div key={String(label)} className="rounded-2xl bg-white/10 p-4 text-center ring-1 ring-white/15">
-              <dd className="font-display text-3xl font-extrabold tabular-nums">{n}</dd>
-              <dt className="mt-1 text-xs font-semibold text-navy-100">{label}</dt>
-            </div>
-          ))}
-        </motion.dl>
-      </motion.section>
+      <CivicGuideChat activity={historyReady ? { completed: counts.completed, week: counts.week, saved: counts.saved } : null} />
 
       {/* 2. Actions: four equal tiles */}
       <motion.section initial="hidden" animate="show" variants={stagger} className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Start something">

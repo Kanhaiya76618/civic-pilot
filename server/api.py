@@ -32,10 +32,13 @@ from server.receipts import sign_receipt, verify_receipt
 from contracts.models import (
     UserRead, TokenResponse, LoginRequest, SignupRequest, CivicReportRead,
     CivicReportCreate, ReportEventRead, ReceiptRead, ReceiptVerifyRequest,
-    ReceiptVerifyResponse, SchemeRead, SchemeEligibilityQuery, SchemeEligibilityMatch
+    ReceiptVerifyResponse, SchemeRead, SchemeEligibilityQuery, SchemeEligibilityMatch,
+    CivicGuideRequest, CivicGuideResponse
 )
+from server.civic_guide import CivicGuide, GuideUnavailable
 
 router = APIRouter()
+_civic_guide = CivicGuide()
 
 # ==============================================================================
 # 1. AUTHENTICATION & DEMO ROLES
@@ -184,6 +187,22 @@ async def get_me(user: Optional[User] = Depends(get_current_user)):
 
 
 # ==============================================================================
+# 1B. OFFICIAL-SOURCE CIVIC GUIDE
+# ==============================================================================
+
+@router.post("/api/v1/civic-guide/chat", response_model=CivicGuideResponse)
+async def civic_guide_chat(
+    request: CivicGuideRequest,
+    user: User = Depends(require_role(["citizen", "admin"])),
+):
+    """Answer only after retrieving official Indian-government/regulator sources."""
+    try:
+        return await _civic_guide.answer(request.message, request.language, request.scope)
+    except GuideUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+# ==============================================================================
 # 2. CITIZEN GRIEVANCE INTAKE & PERCEPTION TRIAGE (Part 2)
 # ==============================================================================
 
@@ -198,7 +217,7 @@ async def create_and_triage_report(
     photo: Optional[UploadFile] = File(None),
     voice: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user)
+    user: User = Depends(require_role(["citizen"]))
 ):
     """
     Multimodal grievance intake with automated AI triage:
@@ -294,7 +313,7 @@ async def create_and_triage_report(
         report_id=report_id,
         event_type="CREATED",
         payload={"category": category, "description": description},
-        actor_role=user.role if user else "citizen",
+    actor_role=user.role,
         actor_id=user_id,
         created_at=now
     )
@@ -346,7 +365,7 @@ async def dispute_report(
     id: str, 
     reason: str = Form("Issue not satisfactorily resolved"), 
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user)
+    user: User = Depends(require_role(["citizen"]))
 ):
     """Citizen dispute-repair: reopens closed/dissatisfied report, resets SLA, flags for admin review."""
     report = db.query(Report).filter(Report.id == id).first()
@@ -364,8 +383,8 @@ async def dispute_report(
         report_id=report.id,
         event_type="DISPUTED",
         payload={"reason": reason},
-        actor_role=user.role if user else "citizen",
-        actor_id=user.id if user else None,
+        actor_role=user.role,
+        actor_id=user.id,
         created_at=now
     )
     db.add(evt)

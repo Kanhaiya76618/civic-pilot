@@ -133,8 +133,8 @@ export const api = {
   sandboxSms: () => fetch("/app/sandbox/sms").then(json<{ messages: { to: string; text: string; at: number }[] }>),
   liveUrl: (taskId: string, token: string) =>
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/citizen/${taskId}/live?t=${encodeURIComponent(token)}`,
-  part1: (path: string, init?: RequestInit) => fetch(`/app/part1/${path}`, init).then(json<any>),
-  part2: (path: string, init?: RequestInit) => fetch(`/app/part2/${path}`, init).then(json<any>),
+  part1: (path: string, init?: RequestInit) => fetch(`/app/part1/${path}`, authenticatedInit(init)).then(json<any>),
+  part2: (path: string, init?: RequestInit) => fetch(`/app/part2/${path}`, authenticatedInit(init)).then(json<any>),
 };
 
 export const secs = (ms?: number | null) => (ms == null ? "–" : ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 1000)}s`);
@@ -145,6 +145,14 @@ export type News = { updated_at: string; items: NewsItem[]; trending: { term: st
   sources: string[]; stale: boolean };
 export type HistoryKind = "explain" | "agent" | "lookup" | "filing" | "report" | "news";
 export type HistoryEntry = { id: string; kind: HistoryKind; title: string; subtitle: string | null; link: string | null; meta: Record<string, unknown>; created_at: string };
+export type CivicGuideSource = { title: string; url: string; excerpt: string };
+export type CivicGuideAnswer = {
+  answer: string; category: string; disclaimer: string; sources: CivicGuideSource[];
+  retrieval_status: "grounded_in_official_sources" | "no_official_sources" | "portal_guide";
+  mode: "civic" | "portal";
+  actions: { label: string; path: string }[];
+  support: { email?: string | null; phone?: string | null; url?: string | null } | null;
+};
 
 function authHeaders(): Record<string, string> {
   try {
@@ -152,6 +160,13 @@ function authHeaders(): Record<string, string> {
     const token = raw ? (JSON.parse(raw).token as string) : "";
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch { return {}; }
+}
+
+/** Preserve multipart headers while adding the signed-in user's application token. */
+function authenticatedInit(init?: RequestInit): RequestInit {
+  const headers = new Headers(init?.headers);
+  for (const [name, value] of Object.entries(authHeaders())) headers.set(name, value);
+  return { ...init, headers };
 }
 
 export const me = {
@@ -162,6 +177,16 @@ export const me = {
       .then(json<HistoryEntry & { already_saved?: boolean }>),
   remove: (id: string) => fetch(`/app/me/history/${id}`, { method: "DELETE", headers: authHeaders() }).then(json<{ ok: boolean }>),
   clear: (kind?: HistoryKind) => fetch(`/app/me/history${kind ? `?kind=${kind}` : ""}`, { method: "DELETE", headers: authHeaders() }).then(json<{ deleted: number }>),
+};
+
+/** The civic guide is authenticated and uses a server-only Groq key. */
+export const civicGuide = {
+  ask: (message: string, language = "English", scope: "auto" | "civic" | "portal" = "auto") =>
+    fetch("/api/v1/civic-guide/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ message, language, scope }),
+    }).then(json<CivicGuideAnswer>),
 };
 
 /** Keep a line in the signed-in citizen's history. Never blocks or breaks the action that triggered it. */

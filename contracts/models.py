@@ -42,6 +42,37 @@ class SignupRequest(BaseModel):
     email: str
     password: str = Field(..., min_length=8, max_length=128)
 
+# ----------------- Civic guide (official-source grounded chat) -----------------
+
+class CivicGuideRequest(BaseModel):
+    message: str = Field(..., min_length=12, max_length=1200)
+    language: str = Field(default="English", min_length=2, max_length=30)
+    scope: Literal["auto", "civic", "portal"] = "auto"
+
+class CivicGuideSource(BaseModel):
+    title: str
+    url: str
+    excerpt: str
+
+class CivicGuideAction(BaseModel):
+    label: str
+    path: str
+
+class CivicGuideSupport(BaseModel):
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    url: Optional[str] = None
+
+class CivicGuideResponse(BaseModel):
+    answer: str
+    category: str
+    disclaimer: str
+    sources: List[CivicGuideSource] = Field(default_factory=list)
+    retrieval_status: str
+    mode: Literal["civic", "portal"] = "civic"
+    actions: List[CivicGuideAction] = Field(default_factory=list)
+    support: Optional[CivicGuideSupport] = None
+
 # ----------------- Grievance / Report Contracts -----------------
 
 class CivicReportCreate(BaseModel):

@@ -59,6 +59,11 @@ def test_public_reports_and_stats(client):
     assert "resolved_pct" in stats
     assert stats["sla_breached"] >= 1
 
+def test_citizen_report_intake_requires_sign_in(client):
+    """The public board is open, but submitting a report always has an accountable citizen session."""
+    res = client.post("/api/reports")
+    assert res.status_code in {401, 403}
+
 def test_admin_queue_access(client):
     # 1. Fresh unauthenticated client should fail with 401
     from fastapi.testclient import TestClient
