@@ -20,7 +20,13 @@ ALLOWED_MIME_TYPES = {
     "image/jpeg": [".jpg", ".jpeg"],
     "image/png": [".png"],
     "application/pdf": [".pdf"],
+    # Voice notes from "Report a problem" (browser recorders produce webm/ogg/mp4)
+    "audio/webm": [".webm"],
+    "audio/ogg": [".ogg", ".oga"],
+    "audio/mpeg": [".mp3"],
+    "audio/mp4": [".m4a", ".mp4"],
 }
+EVIDENCE_PREFIX = "evidence://"  # what the database stores: where the file is, never a public link
 
 # Lazy client initialization
 _supabase_client = None
@@ -109,6 +115,7 @@ def upload_evidence(
 
         return {
             "storage_path": storage_path,
+            "ref": EVIDENCE_PREFIX + storage_path,
             "url": public_url or signed_url,
             "signed_url": signed_url,
             "file_size": len(file_bytes),
@@ -124,11 +131,48 @@ def upload_evidence(
         local_url = f"/uploads/{report_id}/{file_id}{ext}"
         return {
             "storage_path": storage_path,
+            "ref": EVIDENCE_PREFIX + storage_path,
             "url": local_url,
             "signed_url": local_url,
             "file_size": len(file_bytes),
             "content_type": content_type
         }
+
+
+def storage_path_of(stored: str | None) -> str | None:
+    """The storage path inside our bucket, from what the database holds: an evidence:// reference (current), or the
+    public/signed Supabase link older rows saved (those never opened, because the bucket is private). None for
+    anything else, e.g. an outside image link."""
+    if not stored:
+        return None
+    if stored.startswith(EVIDENCE_PREFIX):
+        path = stored[len(EVIDENCE_PREFIX):]
+    else:
+        marker = next((m for m in (f"/object/public/{SUPABASE_BUCKET}/", f"/object/sign/{SUPABASE_BUCKET}/") if m in stored), None)
+        if not marker or not (SUPABASE_URL and stored.startswith(SUPABASE_URL)):
+            return None
+        path = stored.split(marker, 1)[1].split("?", 1)[0]
+    parts = path.split("/")
+    if len(parts) != 2 or ".." in path or not all(parts):
+        return None
+    return path
+
+
+def read_evidence(storage_path: str) -> tuple[bytes, str] | None:
+    """Bytes and content type of a stored file, fetched with the server's key (the bucket stays private)."""
+    import mimetypes
+    media = mimetypes.guess_type(storage_path)[0] or "application/octet-stream"
+    client = get_supabase()
+    if client:
+        try:
+            return client.storage.from_(SUPABASE_BUCKET).download(storage_path), media
+        except Exception:
+            return None
+    local = os.path.join(".data", "uploads", storage_path)
+    if os.path.isfile(local):
+        with open(local, "rb") as f:
+            return f.read(), media
+    return None
 
 
 def get_signed_url(storage_path: str, expires_in: int = 3600) -> str:

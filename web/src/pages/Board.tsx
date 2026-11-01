@@ -7,15 +7,17 @@ import { api, secs, type AppConfig, type Run } from "../api";
 import { Badge, Card, CountUp, fadeUp, NotConnected, stagger } from "../components/ui";
 
 /** Part 2 contract (docs/UI_CONTRACT.md): GET /api/public/reports and GET /api/public/stats. */
-type Report = { code: string; lat: number; lng: number; severity: "P1" | "P2" | "P3"; status: string; category: string; source: "citizen" | "agent"; ward?: string; sla_breached?: boolean };
+type Report = { code: string; lat: number; lng: number; severity: "P1" | "P2" | "P3"; status: string; category: string; source: "citizen" | "agent"; ward?: string; sla_breached?: boolean; resolution_proof_url?: string | null };
 type Stats = { total: number; open: number; resolved_pct: number; avg_resolution_hours: number; sla_breached: number };
 
 const SEV_COLOR = { P1: "#DC2626", P2: "#FF9933", P3: "#138808" } as const;
 const COLUMNS = [
-  { id: "submitted", label: "Submitted", match: ["submitted", "acknowledged"] },
+  // Every server status has a column: new reports arrive "triaged", and rejected ones must stay visible too.
+  { id: "submitted", label: "Submitted", match: ["submitted", "triaged", "acknowledged"] },
   { id: "routed", label: "Routed", match: ["assigned"] },
   { id: "review", label: "In progress", match: ["in_progress"] },
   { id: "resolved", label: "Resolved", match: ["resolved"] },
+  { id: "closed", label: "Closed, not actionable", match: ["rejected"] },
 ];
 
 export default function Board() {
@@ -129,19 +131,22 @@ export default function Board() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+      <div className="mt-6 grid gap-6">
         {reports ? (
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {COLUMNS.map((col) => {
               const items = reports.filter((r) => col.match.includes(r.status));
               return (
-                <div key={col.id} className="rounded-2xl bg-white/70 p-3 ring-1 ring-navy-100">
+                <div key={col.id} className="min-w-0 rounded-2xl bg-white/70 p-3 ring-1 ring-navy-100">
                   <div className="mb-2 flex items-center justify-between text-sm font-bold text-navy-900">{col.label}<span className="rounded-full bg-navy-50 px-2 text-xs">{items.length}</span></div>
                   <div className="space-y-2">
                     {items.slice(0, 6).map((r) => (
                       <motion.div key={r.code} layout className={`rounded-xl bg-white p-2.5 text-xs shadow-sm ring-1 ${r.sla_breached ? "ring-red-300" : "ring-navy-100"}`}>
-                        <div className="flex items-center justify-between font-mono font-bold">{r.code}<span className="size-2.5 rounded-full" style={{ background: SEV_COLOR[r.severity] }} /></div>
-                        <div className="mt-1 text-slate-600">{r.category}</div>
+                        <div className="flex items-center justify-between gap-2 font-mono font-bold" title={r.code}>#{r.code.slice(0, 8)}<span className="size-2.5 shrink-0 rounded-full" style={{ background: SEV_COLOR[r.severity] }} /></div>
+                        <div className="mt-1 truncate text-slate-600">{r.category.replace(/_/g, " ")}{r.ward ? ` · ${r.ward}` : ""}</div>
+                        {r.resolution_proof_url && (
+                          <a href={r.resolution_proof_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 font-semibold text-leaf-700 underline-offset-2 hover:underline">Proof photo</a>
+                        )}
                         {r.source === "agent" && <Badge tone="navy" className="mt-1"><Bot className="size-3" />Agent</Badge>}
                       </motion.div>
                     ))}

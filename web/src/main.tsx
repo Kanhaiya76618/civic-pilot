@@ -52,13 +52,13 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/signin" element={<SignIn />} />
+          <Route path="/board" element={<Board />} />  {/* public: "open to everyone, no login" */}
           <Route element={<RequireAuth />}>
             <Route path="/home" element={<CitizenHome />} />
             <Route path="/history" element={<MyHistory />} />
             <Route path="/schemes" element={<Schemes />} />
             <Route path="/schemes/engine" element={<Engine />} />
             <Route path="/grievance" element={<Grievance />} />
-            <Route path="/board" element={<Board />} />
             <Route path="/agent" element={<AgentHome />} />
             <Route path="/agent/history" element={<AgentHistory />} />
             <Route path="/agent/runs/:runId" element={<AgentRun />} />

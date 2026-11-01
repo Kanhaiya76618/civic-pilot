@@ -25,7 +25,8 @@ from server.db import (
 from server.auth import (
     create_access_token, get_current_user, require_role
 )
-from server.storage import upload_evidence, validate_file, StorageValidationError
+from fastapi.responses import Response
+from server.storage import upload_evidence, validate_file, StorageValidationError, storage_path_of, read_evidence
 from server.triage import compute_triage_decision
 from server.receipts import sign_receipt, verify_receipt
 from contracts.models import (
@@ -79,17 +80,28 @@ def _profile_name(auth_user: Any, fallback: Optional[str] = None) -> str:
     metadata = getattr(auth_user, "user_metadata", None) or {}
     return str(metadata.get("name") or fallback or "Citizen User").strip()[:80]
 
-def _sync_authenticated_user(db: Session, email: str, name: Optional[str]) -> User:
-    """Mirror a verified Supabase identity into the civic data store without trusting a client role."""
+def _profile_role(auth_user: Any) -> str:
+    """Read a role only from trusted Supabase app metadata, never user-editable metadata."""
+    metadata = getattr(auth_user, "app_metadata", None) or {}
+    return "admin" if metadata.get("civic_role") == "admin" else "citizen"
+
+def _sync_authenticated_user(db: Session, email: str, name: Optional[str], trusted_role: str = "citizen") -> User:
+    """Mirror a verified Supabase identity; only server-managed app metadata may grant admin access."""
     user = db.query(User).filter(User.email == email).first()
     if user:
+        changed = False
         if name and user.name != name:
             user.name = name
+            changed = True
+        if trusted_role == "admin" and user.role != "admin":
+            user.role = "admin"
+            changed = True
+        if changed:
             db.commit()
             db.refresh(user)
         return user
     user = User(
-        id=str(uuid.uuid4()), email=email, name=name or "Citizen User", role="citizen",
+        id=str(uuid.uuid4()), email=email, name=name or "Citizen User", role=trusted_role,
         created_at=datetime.now(timezone.utc),
     )
     db.add(user)
@@ -155,7 +167,12 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     auth_user = getattr(result, "user", None)
     if not auth_user or not getattr(auth_user, "email", None):
         raise HTTPException(status_code=401, detail="Email or password is incorrect. Please try again.")
-    user = _sync_authenticated_user(db, auth_user.email.strip().lower(), _profile_name(auth_user))
+    user = _sync_authenticated_user(
+        db,
+        auth_user.email.strip().lower(),
+        _profile_name(auth_user),
+        _profile_role(auth_user),
+    )
     return _app_token_response(user)
 
 
@@ -205,7 +222,7 @@ async def create_and_triage_report(
                     content_type=photo.content_type or "image/jpeg",
                     report_id=report_id
                 )
-                evidence_urls.append(upload_res["url"])
+                evidence_urls.append(upload_res["ref"])
             except StorageValidationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message)
 
@@ -215,15 +232,17 @@ async def create_and_triage_report(
         if len(voice_bytes) > 0:
             try:
                 # Store voice note
+                media = (voice.content_type or "audio/webm").split(";")[0].strip()
+                ext = {"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a"}.get(media, ".webm")
                 v_res = upload_evidence(
                     file_bytes=voice_bytes,
-                    filename=voice.filename or "voice.webm",
-                    content_type="application/pdf",  # fallback or bypass
+                    filename=f"voice{ext}",  # its real type: it was sent as a PDF before and always rejected
+                    content_type=media,
                     report_id=report_id
                 )
-                evidence_urls.append(v_res["url"])
-            except Exception:
-                pass
+                evidence_urls.append(v_res["ref"])
+            except StorageValidationError as e:
+                raise HTTPException(status_code=e.status_code, detail=f"Voice note: {e.message}")
 
     # Run AI Triage Engine
     triage = compute_triage_decision(
@@ -382,8 +401,9 @@ async def get_public_reports(db: Session = Depends(get_db)):
             "sla_breached": is_breached,
             "description": r.description,
             "upvotes": r.upvotes,
-            "evidence_urls": r.evidence_urls,
-            "resolution_proof_url": r.resolution_proof_url,
+            "evidence_urls": [],  # citizens' own photos and voice notes are not public
+            "evidence_count": len(r.evidence_urls or []),
+            "resolution_proof_url": proof_link(r),
             "resolution_notes": r.resolution_notes,
             "duplicate_of": str(r.duplicate_of) if r.duplicate_of else None
         })
@@ -470,8 +490,8 @@ async def get_admin_queue(
             "assigned_to": r.assigned_to,
             "upvotes": r.upvotes,
             "duplicate_of": str(r.duplicate_of) if r.duplicate_of else None,
-            "evidence_urls": r.evidence_urls,
-            "resolution_proof_url": r.resolution_proof_url,
+            "evidence_urls": evidence_links(r),
+            "resolution_proof_url": proof_link(r),
             "created_at": r.created_at.isoformat()
         })
     return queue
@@ -576,6 +596,55 @@ async def admin_assign_report(
     return {"ok": True, "status": report.status, "assigned_to": report.assigned_to}
 
 
+# ------------------------------------------------------------------ evidence delivery
+# The bucket stays private. The database stores where a file is (evidence://report/file); this server fetches it with
+# its own key. Proof-of-repair photos are public (that is the accountability). Citizens' photos and voice notes are
+# for the municipal desk only.
+
+def proof_link(r) -> str | None:
+    return f"/api/v1/evidence/{r.id}/proof" if storage_path_of(r.resolution_proof_url) else None
+
+
+def evidence_links(r) -> list[str]:
+    return [f"/api/v1/evidence/{r.id}/{i}" for i, ref in enumerate(r.evidence_urls or []) if storage_path_of(ref)]
+
+
+def _report_or_404(db: Session, report_id: str):
+    try:
+        uuid.UUID(report_id)  # anything else would crash the database query
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report
+
+
+def _serve(stored: str | None, what: str) -> Response:
+    path = storage_path_of(stored)
+    got = read_evidence(path) if path else None
+    if not got:
+        raise HTTPException(status_code=404, detail=f"{what} is not available in storage.")
+    data, media = got
+    return Response(data, media_type=media, headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/api/v1/evidence/{report_id}/proof")
+async def evidence_proof(report_id: str, db: Session = Depends(get_db)):
+    """Proof-of-repair photo: public, so anyone can check a 'resolved' claim."""
+    return _serve(_report_or_404(db, report_id).resolution_proof_url, "The resolution proof photo")
+
+
+@router.get("/api/v1/evidence/{report_id}/{index}")
+async def evidence_item(report_id: str, index: int, db: Session = Depends(get_db),
+                        admin_user: User = Depends(require_role(["admin"]))):
+    """A citizen's photo or voice note: municipal desk only."""
+    items = _report_or_404(db, report_id).evidence_urls or []
+    if not 0 <= index < len(items):
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return _serve(items[index], "This evidence file")
+
+
 @router.post("/api/v1/admin/reports/{id}/resolve")
 async def admin_resolve_report(
     id: str,
@@ -608,7 +677,7 @@ async def admin_resolve_report(
 
     now = datetime.now(timezone.utc)
     report.status = "RESOLVED"
-    report.resolution_proof_url = upload_res["url"]
+    report.resolution_proof_url = upload_res["ref"]
     report.resolution_notes = resolution_notes
     report.updated_at = now
 
@@ -618,7 +687,7 @@ async def admin_resolve_report(
         event_type="RESOLVED",
         payload={
             "resolution_notes": resolution_notes,
-            "proof_url": upload_res["url"]
+            "proof_ref": upload_res["ref"]
         },
         actor_role="admin",
         actor_id=admin_user.id,
@@ -629,7 +698,7 @@ async def admin_resolve_report(
     return {
         "ok": True, 
         "status": report.status, 
-        "resolution_proof_url": report.resolution_proof_url,
+        "resolution_proof_url": proof_link(report),
         "resolution_notes": report.resolution_notes
     }
 

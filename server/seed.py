@@ -483,7 +483,12 @@ def seed_database():
             }
         ]
 
-        for rep in reports_seed:
+        # Made-up reports (stock photos, invented addresses) break the "no dummy data" rule: they are created only for
+        # local experiments, with SEED_DEMO_REPORTS=1. A judged or deployed database starts with real reports only.
+        demo = os.environ.get("SEED_DEMO_REPORTS") == "1"
+        if not demo:
+            print("Skipping demo reports and the demo receipt (set SEED_DEMO_REPORTS=1 to create them locally).")
+        for rep in (reports_seed if demo else []):
             existing_r = db.query(Report).filter(Report.id == rep["id"]).first()
             if not existing_r:
                 r_obj = Report(
@@ -529,7 +534,7 @@ def seed_database():
 
         # 5. SEED VERIFIABLE CRYPTOGRAPHIC RECEIPT FOR AGENT-FILED REPORT
         receipt_task_id = "task-bbmp-swd-2026-001"
-        existing_rcpt = db.query(ReceiptModel).filter(ReceiptModel.task_id == receipt_task_id).first()
+        existing_rcpt = db.query(ReceiptModel).filter(ReceiptModel.task_id == receipt_task_id).first() if demo else True
         if not existing_rcpt:
             receipt_payload = {
                 "task_id": receipt_task_id,
