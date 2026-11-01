@@ -7,7 +7,7 @@ the API URL and key:
   CIVIC_API_URL=http://127.0.0.1:8000 CIVIC_API_KEY=... uv run python -m executor.mcp_server
 
 Claude Desktop / any MCP client config:
-  {"mcpServers": {"civic-pulse": {"command": "uv", "args": ["run", "--directory", "<repo>", "python", "-m", "executor.mcp_server"],
+  {"mcpServers": {"swayam-sevak": {"command": "uv", "args": ["run", "--directory", "<repo>", "python", "-m", "executor.mcp_server"],
                                   "env": {"CIVIC_API_URL": "http://127.0.0.1:8000", "CIVIC_API_KEY": "..."}}}}
 
 Filing still needs the citizen: start_application returns a citizen_url where
@@ -32,9 +32,9 @@ TERMINAL = {"completed", "failed", "needs_review"}
 logging.getLogger("httpx").setLevel(logging.WARNING)  # stdio MCP: keep stderr for real problems
 
 server = MCPServer(
-    name="civic-pulse-executor",
+    name="swayam-sevak-executor",
     instructions=(
-        "Civic Pulse Part 3 operates Indian government portals in a real browser. "
+        "Swayam-sevak Part 3 operates Indian government portals in a real browser. "
         "Use find_schemes for live scheme eligibility from myScheme.gov.in (read-only, fast). "
         "Use list_services, then start_application to fill a form; give the returned citizen_url to the citizen, "
         "who completes OTP/CAPTCHA and approves before anything is filed. Never invent citizen details."

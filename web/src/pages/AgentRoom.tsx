@@ -106,7 +106,7 @@ function BrowserCard({ s, taskId, token, caption }: { s: TaskState; taskId: stri
   const toast = useToast();
   const imgRef = useRef<HTMLImageElement>(null);
   const url = s.page_url ?? s.receipt?.result?.source_url ?? "";
-  const shownUrl = url.replace(/^https?:\/\//, "").replace(/^127\.0\.0\.1:\d+/, "sandbox.civicpulse.local");
+  const shownUrl = url.replace(/^https?:\/\//, "").replace(/^127\.0\.0\.1:\d+/, "sandbox.swayamsevak.local");
   const finalSrc = s.has_final ? `/citizen/${taskId}/final.png?t=${encodeURIComponent(token)}` : null;
   const src = running ? frame : finalSrc ?? frame;
   const human = s.human;

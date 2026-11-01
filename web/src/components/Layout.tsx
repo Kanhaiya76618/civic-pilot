@@ -64,10 +64,10 @@ function Header({ dark }: { dark?: boolean }) {
   return (
     <header className={`sticky top-0 z-40 ${dark ? "border-b border-white/5 bg-night-900/80 backdrop-blur" : "glass border-x-0 border-t-0"}`}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5">
-        <Link to={home} className="flex items-center gap-3" aria-label="Civic Pulse home">
+        <Link to={home} className="flex items-center gap-3" aria-label="Swayam-sevak home">
           <Logo size={dark ? 36 : 46} />
           <div className="leading-tight">
-            <div className={`font-display text-xl font-extrabold ${dark ? "text-white" : "text-navy-900"}`}>Civic Pulse <span className={`font-semibold ${dark ? "text-slate-400" : "text-saffron-700"}`}>· सिविक पल्स</span></div>
+            <div className={`font-display text-xl font-extrabold ${dark ? "text-white" : "text-navy-900"}`}>Swayam-sevak <span className={`font-semibold ${dark ? "text-slate-400" : "text-saffron-700"}`}>· स्वयंसेवक</span></div>
             {!dark && <div className="text-xs font-medium text-slate-600">{t("brandTagline")}</div>}
           </div>
         </Link>
@@ -109,7 +109,7 @@ function Footer({ dark }: { dark?: boolean }) {
         <div className="flex items-start gap-3">
           <Logo size={40} />
           <div>
-            <div className="font-display text-lg font-bold text-white">Civic Pulse</div>
+            <div className="font-display text-lg font-bold text-white">Swayam-sevak</div>
             <p className="mt-1 text-sm opacity-80">Assisted filing: a human approves every submission.</p>
           </div>
         </div>

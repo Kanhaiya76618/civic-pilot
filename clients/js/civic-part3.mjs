@@ -1,4 +1,4 @@
-// Tiny client for Civic Pulse Part 3 (Node 18+ or the browser; copy this one file).
+// Tiny client for Swayam-sevak Part 3 (Node 18+ or the browser; copy this one file).
 //
 //   import { Part3 } from "./civic-part3.mjs";
 //   const p3 = new Part3("http://<host>:8000", process.env.CIVIC_API_KEY);

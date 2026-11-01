@@ -1,4 +1,4 @@
-"""Tiny client for Civic Pulse Part 3 (copy this one file into Part 1 or Part 2).
+"""Tiny client for Swayam-sevak Part 3 (copy this one file into Part 1 or Part 2).
 
     from civic_part3 import Part3
     p3 = Part3("http://<host>:8000", api_key="...")

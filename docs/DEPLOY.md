@@ -44,11 +44,11 @@ minute before judging.
 ## Build and run locally
 
 ```bash
-docker build -t civic-pulse .
+docker build -t swayam-sevak .
 ```
 
 ```bash
-docker run --rm -p 7860:7860 -e AIMLAPI_KEY -e CIVIC_PUBLIC_URL=http://localhost:7860 civic-pulse
+docker run --rm -p 7860:7860 -e AIMLAPI_KEY -e CIVIC_PUBLIC_URL=http://localhost:7860 swayam-sevak
 ```
 
 Then open http://localhost:7860.

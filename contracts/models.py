@@ -1,5 +1,5 @@
 """
-CivicPilot Data Contracts (Pydantic Models)
+Swayam-sevak Data Contracts (Pydantic Models)
 Standardized request/response models used across Server, Triage, and Agent layers.
 """
 

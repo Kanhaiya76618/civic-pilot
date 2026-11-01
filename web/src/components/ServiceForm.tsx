@@ -193,7 +193,7 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
         <div>
           <label className="flex items-start gap-3 rounded-2xl bg-leaf-50/70 p-4 text-sm text-slate-700 ring-1 ring-leaf-200">
             <input id="f_consent" type="checkbox" className="mt-0.5 size-5 accent-[#138808]" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErrors((x) => ({ ...x, consent: "" })); }} />
-            <span><ShieldCheck className="mr-1 inline size-4 text-leaf-700" />I agree that Civic Pulse may fill <b>{service.description}</b> on <b>{service.portal_name}</b> for me during the next 24 hours. Nothing is submitted without my approval.</span>
+            <span><ShieldCheck className="mr-1 inline size-4 text-leaf-700" />I agree that Swayam-sevak may fill <b>{service.description}</b> on <b>{service.portal_name}</b> for me during the next 24 hours. Nothing is submitted without my approval.</span>
           </label>
           <Err k="consent" />
         </div>
@@ -275,7 +275,7 @@ export function ServiceForm({ service, prefill = {}, hide = [], extraFiles = [],
       <div>
         <label className="flex items-start gap-3 rounded-2xl bg-leaf-50/70 p-4 text-sm text-slate-700 ring-1 ring-leaf-200">
           <input id="f_consent" type="checkbox" className="mt-0.5 size-5 accent-[#138808]" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErrors((x) => ({ ...x, consent: "" })); }} />
-          <span><ShieldCheck className="mr-1 inline size-4 text-leaf-700" />I agree that Civic Pulse may fill <b>{service.description}</b> on <b>{service.portal_name}</b> for me during the next 24 hours. Nothing is submitted without my approval.</span>
+          <span><ShieldCheck className="mr-1 inline size-4 text-leaf-700" />I agree that Swayam-sevak may fill <b>{service.description}</b> on <b>{service.portal_name}</b> for me during the next 24 hours. Nothing is submitted without my approval.</span>
         </label>
         <Err k="consent" />
       </div>

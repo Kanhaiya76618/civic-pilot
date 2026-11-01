@@ -1,5 +1,5 @@
 """
-CivicPilot Triage & Perception Engine
+Swayam-sevak Triage & Perception Engine
 Integrates:
 1. Multimodal perception (YOLOv8 pothole detection, black-hat crack morphology, Laplacian blur filter)
 2. Civic speech/text intent classifier

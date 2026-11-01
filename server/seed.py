@@ -1,5 +1,5 @@
 """
-CivicPilot Seed Script (Idempotent Upsert)
+Swayam-sevak Seed Script (Idempotent Upsert)
 Populates Supabase PostgreSQL / SQLite with:
 - 2 Demo Users (Citizen, Municipal Admin)
 - 18 Realistic Civic Reports across 4 Wards (Bangalore BBMP, Pune PMC, Delhi)
@@ -26,7 +26,7 @@ def seed_database():
     db: Session = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        print("Starting idempotent seed of CivicPilot database...")
+        print("Starting idempotent seed of Swayam-sevak database...")
 
         # 1. SEED USERS
         users_data = [

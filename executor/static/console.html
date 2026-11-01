@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Civic Pulse Agent</title>
+<title>Swayam-sevak Agent</title>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#5b6470; --line:#dfe3e8; --brand:#0b6e4f; --brand-soft:#e5f3ed; --warn:#a15c00; --bad:#b42318; }
   @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f25; --ink:#e8ebef; --muted:#9aa4b0; --line:#2b323b; --brand:#3ccf91; --brand-soft:#173327; --warn:#f0b35a; --bad:#ff8a80; } }
@@ -40,7 +40,7 @@
 </head>
 <body>
 <main>
-  <div class="muted">Civic Pulse · Part 3</div>
+  <div class="muted">Swayam-sevak · Part 3</div>
   <h1>Let the agent fill the portal for you</h1>
   <p class="muted" style="margin:0">It fills government forms in a real browser. You do the OTP and CAPTCHA, and you approve anything that would be filed.</p>
   <div class="badges">
@@ -122,7 +122,7 @@ function pick(s, btn) {
   if (s.explorable && s.has_recorded_route) opts += `<div><label for="strategy">How the agent works</label><select id="strategy"><option value="route">Replay the recorded route (fast, no AI calls)</option><option value="explore">Let the AI explore live (shows its reasoning)</option></select></div>`;
   else if (s.explorable) opts += `<div><label>How the agent works</label><div class="hint">No recorded route yet: the AI explores this portal live and records the route for next time.</div></div>`;
   $('options').innerHTML = opts;
-  $('consent-text').textContent = `I agree that Civic Pulse may fill "${s.description}" on ${s.portal_name} for me during the next 24 hours. Nothing is submitted without my approval.`;
+  $('consent-text').textContent = `I agree that Swayam-sevak may fill "${s.description}" on ${s.portal_name} for me during the next 24 hours. Nothing is submitted without my approval.`;
   $('ifsc-out') && $('f_ifsc').addEventListener('input', checkIfsc);
   $('form').scrollIntoView({behavior: 'smooth'});
 }

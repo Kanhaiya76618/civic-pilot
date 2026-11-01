@@ -1,7 +1,7 @@
 # Skill Note: Cryptographic Receipts (Ed25519) & Hash-Chained Audit Ledger
 
 ## Overview & Architecture
-To guarantee public transparency without relying on unverified claims, CivicPilot implements two layers of cryptographic integrity:
+To guarantee public transparency without relying on unverified claims, Swayam-sevak implements two layers of cryptographic integrity:
 1. **Ed25519 Signed Execution Receipts**: Every portal submission generates a receipt signed by the agent's private key. Anyone can verify using the public key that the registration number, screenshot SHA-256 hash, and timestamp have not been tampered with.
 2. **Hash-Chained Grievance Ledger**: Each ticket in the ledger contains a cryptographic hash of its canonical content plus the previous block's hash:
    $$\text{Block}_n = \text{SHA-256}(\text{CanonicalJSON}(\text{Payload}_n) \parallel \text{Hash}_{n-1})$$

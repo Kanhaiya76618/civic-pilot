@@ -1,5 +1,5 @@
 """
-CivicPilot Database Layer
+Swayam-sevak Database Layer
 Dual-mode SQLAlchemy support:
 - Supabase PostgreSQL (production / hackathon live backend)
 - SQLite (offline fallback / testing)

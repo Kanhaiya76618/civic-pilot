@@ -1,5 +1,5 @@
 ---
-title: Civic Pulse Agent
+title: Swayam-sevak Agent
 emoji: 🏛️
 colorFrom: green
 colorTo: blue
@@ -8,5 +8,5 @@ app_port: 7860
 pinned: false
 ---
 
-Civic Pulse Part 3: an assisted execution agent for Indian government portals.
+Swayam-sevak Part 3: an assisted execution agent for Indian government portals.
 Source and docs: see the GitHub repository.

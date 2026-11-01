@@ -23,7 +23,7 @@ applications.
 
 ## 2. Solution description
 
-**High-level overview.** Civic Pulse takes a citizen from "I have a problem" or
+**High-level overview.** Swayam-sevak takes a citizen from "I have a problem" or
 "I might be eligible" to "it is filed, here is the receipt", in their own
 language, with a human approving every submission. [Part 1: the explainer turns
 policy text into plain regional-language answers.] [Part 2: triage turns a
@@ -58,7 +58,7 @@ diagrams in the README.
 
 | Time | Show | Say |
 |---|---|---|
-| 0:00–0:15 | Console home | "Civic Pulse fills government portals for citizens; a human approves every submission." |
+| 0:00–0:15 | Console home | "Swayam-sevak fills government portals for citizens; a human approves every submission." |
 | 0:15–0:55 | myScheme service: type a PIN code (district and state fill from live India Post data), answer the questions, consent, Start. The citizen page shows the steps, then the real scheme list. | "This is the real myScheme.gov.in. The agent answers six screens, including questions that only appear after earlier answers, in about 4 to 6 seconds with zero AI calls, because it replays a route it learned earlier." |
 | 0:55–1:30 | The same service with "Let the AI explore live" (needs the API key). The reasoning panel fills turn by turn. | "With no route, Claude plans each screen. It chooses where to click, never what to type. The run is saved as a new route." |
 | 1:30–2:15 | Grievance filing (sandbox replica): OTP typed in the live view, CAPTCHA, the approval card (values, masked bank number, differences), Approve, reference number, signed receipt. | "Filing stops for the citizen: the OTP and CAPTCHA are typed by them, and nothing is submitted until they approve. We use a sandbox for filings, because test complaints to real ministries would be fake government records." |
@@ -71,7 +71,7 @@ Record it live from start to finish. Do not present a recording as if it were li
 Public repository with this README, diagrams, setup steps, and all source and configuration.
 
 ## 6. Deck (6 slides)
-1. **Civic Pulse**: team, one-line pitch, the three parts.
+1. **Swayam-sevak**: team, one-line pitch, the three parts.
 2. **The problem**: the portal maze (screenshots of OTP, CAPTCHA, upload limits); who drops out.
 3. **The solution**: citizen journey: ask → explain (Part 1) or report (Part 2) → file (Part 3) → receipt and tracking.
 4. **Architecture and innovation**: the diagram; "AI plans once, replays forever"; guardrails in code; signed receipts.

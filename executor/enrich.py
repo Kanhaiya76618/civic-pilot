@@ -33,7 +33,7 @@ class Lookup:
 
 
 async def _get(url: str) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=6, transport=transport, headers={"User-Agent": "CivicPulse/0.1"}) as c:
+    async with httpx.AsyncClient(timeout=6, transport=transport, headers={"User-Agent": "Swayam-sevak/0.1"}) as c:
         return await c.get(url)
 
 

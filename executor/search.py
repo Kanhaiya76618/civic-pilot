@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 DDG_URL = "https://html.duckduckgo.com/html/"
-UA = "CivicPulse/0.1 (hackathon research agent; allow-listed government sites only)"
+UA = "Swayam-sevak/0.1 (hackathon research agent; allow-listed government sites only)"
 transport: httpx.AsyncBaseTransport | None = None  # tests inject a MockTransport
 
 _ANCHOR = re.compile(r'<a\b([^>]*)>(.*?)</a>', re.S | re.I)

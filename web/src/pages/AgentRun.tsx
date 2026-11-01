@@ -114,7 +114,7 @@ function StepCard({ s, runId, token, selected, onSelect, latest }: {
 function Browser({ runId, token, live, step, caption }: { runId: string; token: string | null; live: boolean; step: RunStep | null; caption: string | null }) {
   const { frame } = useLiveFrames(runId, token ?? "", live && !!token);
   const src = live && frame ? frame : step?.screenshot ? agent.shot(runId, step.step_no, token) : null;
-  const url = (step?.url ?? "").replace(/^https?:\/\//, "").replace(/^127\.0\.0\.1:\d+/, "sandbox.civicpulse.local");
+  const url = (step?.url ?? "").replace(/^https?:\/\//, "").replace(/^127\.0\.0\.1:\d+/, "sandbox.swayamsevak.local");
   return (
     <div className="overflow-hidden rounded-2xl bg-night-800 shadow-2xl shadow-black/40 ring-1 ring-white/10">
       <div className="flex items-center gap-3 border-b border-white/5 bg-night-700/70 px-3 py-2">

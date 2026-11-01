@@ -1,5 +1,5 @@
 """
-CivicPilot Authentication & Authorization
+Swayam-sevak Authentication & Authorization
 Role-based access control supporting 'citizen' and 'admin' roles.
 Uses JWT tokens stored in Authorization header or httpOnly cookies.
 """

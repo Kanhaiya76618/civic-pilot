@@ -1,4 +1,4 @@
-# Review of "Civic Pulse — Build Plan (Part 3 in depth)"
+# Review of "Swayam-sevak — Build Plan (Part 3 in depth)"
 
 The plan is mostly sound: assisted filing with a human approving every submit,
 a deterministic route runner first, a model only for repair, and sensitive values

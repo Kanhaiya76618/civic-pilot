@@ -3,10 +3,10 @@ import { CircleAlert, CircleCheck, LoaderCircle, ShieldAlert, X } from "lucide-r
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { PlugArt } from "./Illustrations";
 
-/** Original Civic Pulse mark: saffron and green arcs around a navy pulse line. Not a government emblem. */
+/** Original Swayam-sevak mark: saffron and green arcs around a navy pulse line. Not a government emblem. */
 export function Logo({ size = 44, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} className={className} role="img" aria-label="Civic Pulse logo">
+    <svg viewBox="0 0 64 64" width={size} height={size} className={className} role="img" aria-label="Swayam-sevak logo">
       <circle cx="32" cy="32" r="30" fill="#fff" />
       <path d="M8 30a24 24 0 0 1 48 0" fill="none" stroke="#FF9933" strokeWidth="6" strokeLinecap="round" />
       <path d="M56 36a24 24 0 0 1-48 0" fill="none" stroke="#138808" strokeWidth="6" strokeLinecap="round" />

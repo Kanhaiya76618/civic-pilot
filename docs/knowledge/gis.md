@@ -15,7 +15,7 @@ Accurate municipal grievance routing depends on three core geospatial operations
 - **Haversine Distance**:
   $$d = 2r \arcsin\left(\sqrt{\sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right)}\right)$$
   Flag any ticket within 50m with identical category as a duplicate candidate.
-- **Nominatim Caching & 1 req/s Throttling**: OSM Nominatim requires an identifiable `User-Agent: CivicPilot-Hackathon/1.0 (contact@example.com)`. Cache responses rounded to 4 decimal places (~11m resolution) to eliminate duplicate external requests.
+- **Nominatim Caching & 1 req/s Throttling**: OSM Nominatim requires an identifiable `User-Agent: Swayam-sevak-Hackathon/1.0 (contact@example.com)`. Cache responses rounded to 4 decimal places (~11m resolution) to eliminate duplicate external requests.
 
 ---
 
@@ -80,7 +80,7 @@ async def reverse_geocode_nominatim(lat: float, lon: float) -> str:
     if elapsed < 1.0:
         time.sleep(1.0 - elapsed)
         
-    headers = {"User-Agent": "CivicPilot-GovernancePlatform/1.0 (hackathon-demo@civicpilot.local)"}
+    headers = {"User-Agent": "Swayam-sevak-GovernancePlatform/1.0 (hackathon-demo@swayamsevak.local)"}
     params = {"format": "jsonv2", "lat": lat, "lon": lon}
     async with httpx.AsyncClient(timeout=4) as client:
         r = await client.get(NOMINATIM_URL, params=params, headers=headers)

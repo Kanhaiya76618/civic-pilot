@@ -1,11 +1,11 @@
-# CivicPilot: Unified Autonomous Civic Governance Platform
+# Swayam-sevak: Unified Autonomous Civic Governance Platform
 
-CivicPilot is an end-to-end, privacy-preserving, AI-assisted civic platform unifying:
+Swayam-sevak is an end-to-end, privacy-preserving, AI-assisted civic platform unifying:
 1. **Multilingual Welfare Scheme Explainer & Eligibility Matching (Part 1)**
 2. **Multimodal Civic Grievance Triage, GIS Routing & Municipal Operations Desk (Part 2)**
 3. **Assisted Execution Agent with Tamper-Evident Ed25519 Cryptographic Receipts (Part 3)**
 
-Backed by a live **Supabase PostgreSQL 17** database, **Supabase Evidence Storage**, and offline-first perception models (**YOLOv8**, **OpenCV crack morphology**, **Shapely GIS**), CivicPilot ensures **Zero Dummy Data**, **Zero Disguised Video Demos**, and **Full Human-in-the-Loop Accountability**.
+Backed by a live **Supabase PostgreSQL 17** database, **Supabase Evidence Storage**, and offline-first perception models (**YOLOv8**, **OpenCV crack morphology**, **Shapely GIS**), Swayam-sevak ensures **Zero Dummy Data**, **Zero Disguised Video Demos**, and **Full Human-in-the-Loop Accountability**.
 
 ---
 
@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph Backend["Live Unified Backend (FastAPI + Supabase)"]
-        AUTH["Supabase Auth + role-aware CivicPulse JWT"]
+        AUTH["Supabase Auth + role-aware Swayam-sevak JWT"]
         DB[("Supabase PostgreSQL 17: Reports, Events, Schemes, Receipts")]
         STORAGE[("Supabase Storage: Evidence Bucket (MIME & 10MB capped)")]
         LEDGER["Ed25519 Verifiable Ledger (SHA-256 Hash Chaining)"]
@@ -135,7 +135,7 @@ DATABASE_MODE=supabase
 
 Citizen registration and sign-in use Supabase Auth with email and password. In the Supabase dashboard, add your local or deployed sign-in page (for example, `http://localhost:5173/signin`) to **Authentication → URL Configuration → Redirect URLs**. Hosted projects with email confirmation enabled will ask the citizen to verify their email before their first sign-in.
 
-Municipal accounts cannot self-register from the portal. Create or invite the officer in Supabase Auth, then give the matching CivicPulse profile the `admin` role. The seeded `admin@demo.in` record remains only an automated-test fixture; it is not a public municipal credential.
+Municipal accounts cannot self-register from the portal. Create or invite the officer in Supabase Auth, then give the matching Swayam-sevak profile the `admin` role. The seeded `admin@demo.in` record remains only an automated-test fixture; it is not a public municipal credential.
 
 ### 3. Seed Live Database (Idempotent)
 Populates demo users, 18 realistic ward reports, an SLA breach, a deduplicated pair, and a signed receipt:

@@ -1,7 +1,7 @@
 [project]
 name = "civic-pilot"
 version = "0.1.0"
-description = "Civic Pulse Part 3: assisted execution agent for public-service portals"
+description = "Swayam-sevak Part 3: assisted execution agent for public-service portals"
 authors = [
     { name = "Kanhaiya76618", email = "kanhaiyakumar76618@gmail.com" }
 ]

@@ -359,7 +359,7 @@ class Explainer:
         """charge: called before reading a scan, which costs model calls. A link read in the last day is reused."""
         if seen := self._existing(f"url:{url}", max_age_s=86400):
             return seen
-        headers = {"User-Agent": "CivicPulse/0.1 (citizen explainer; official documents only)"}
+        headers = {"User-Agent": "Swayam-sevak/0.1 (citizen explainer; official documents only)"}
         for _ in range(6):  # follow redirects ourselves, checking every hop stays on government hosts
             host = urlparse(url).hostname or ""
             if not url.startswith(("https://", "http://")) or not doc_host_allowed(host):

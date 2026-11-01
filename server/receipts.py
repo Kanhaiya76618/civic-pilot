@@ -1,5 +1,5 @@
 """
-CivicPilot Receipt Signing & Hash-Chained Verifiable Ledger
+Swayam-sevak Receipt Signing & Hash-Chained Verifiable Ledger
 Uses PyNaCl (Ed25519) for tamper-evident digital signatures and SHA-256 hash chaining.
 """
 
@@ -10,7 +10,7 @@ from typing import Dict, Any, Tuple, Optional
 import nacl.signing
 import nacl.encoding
 
-# Key management: Load or generate a persistent Ed25519 key for CivicPilot authority
+# Key management: Load or generate a persistent Ed25519 key for Swayam-sevak authority
 KEY_DIR = os.path.join(".data", "keys")
 KEY_PATH = os.path.join(KEY_DIR, "authority_ed25519.key")
 
@@ -29,7 +29,7 @@ def get_or_create_signing_key() -> nacl.signing.SigningKey:
 
 
 def get_public_key_hex() -> str:
-    """Returns the hex-encoded Ed25519 public key of the CivicPilot authority."""
+    """Returns the hex-encoded Ed25519 public key of the Swayam-sevak authority."""
     signing_key = get_or_create_signing_key()
     return signing_key.verify_key.encode(encoder=nacl.encoding.HexEncoder).decode("utf-8")
 

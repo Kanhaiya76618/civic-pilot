@@ -1,5 +1,5 @@
 -- Paste this whole file into the Supabase SQL Editor
--- CivicPilot Unified Civic Governance Platform Schema
+-- Swayam-sevak Unified Civic Governance Platform Schema
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

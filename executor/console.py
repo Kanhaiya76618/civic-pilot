@@ -75,7 +75,7 @@ PLAN_SCHEMA = {
     "additionalProperties": False,
 }
 
-PLAN_SYSTEM = """You plan requests for Civic Pulse, an agent that works only on the ALLOWED SITES below, for Indian citizens.
+PLAN_SYSTEM = """You plan requests for Swayam-sevak, an agent that works only on the ALLOWED SITES below, for Indian citizens.
 
 Intents:
 - discovery: find or learn something (schemes, eligibility, benefits, documents, how to apply). Answered by searching and reading the allowed sites.
@@ -111,7 +111,7 @@ STEP_SCHEMA = {
     "additionalProperties": False,
 }
 
-STEP_SYSTEM = """You are Civic Pulse's research agent. You operate a real browser, one action per step, on allow-listed official websites only, to answer the citizen's REQUEST with facts read from those pages.
+STEP_SYSTEM = """You are Swayam-sevak's research agent. You operate a real browser, one action per step, on allow-listed official websites only, to answer the citizen's REQUEST with facts read from those pages.
 
 Actions (exactly one per step; unused fields are empty strings, press_enter false):
 - goto {url}: open a URL on an allowed site (from SEARCH RESULTS, the current page, or an allowed site's address).

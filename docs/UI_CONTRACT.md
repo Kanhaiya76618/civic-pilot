@@ -1,4 +1,4 @@
-# UI contract: what the unified Civic Pulse app expects from each part
+# UI contract: what the unified Swayam-sevak app expects from each part
 
 One web app (`web/`) shows all three parts, served by one server.
 

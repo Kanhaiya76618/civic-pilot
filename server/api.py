@@ -1,5 +1,5 @@
 """
-CivicPilot Unified API Router
+Swayam-sevak Unified API Router
 Unifies:
 - Auth & Roles (Citizen, Municipal Admin)
 - Grievance Intake & Triage (Part 2)
@@ -46,7 +46,7 @@ DEMO_IDENTITIES = {
 }
 
 def _app_token_response(user: User) -> JSONResponse:
-    """Issue CivicPulse's short-lived app token after Supabase has authenticated a user."""
+    """Issue Swayam-sevak's short-lived app token after Supabase has authenticated a user."""
     token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
     response = JSONResponse(content={
         "access_token": token,
@@ -143,7 +143,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     if not req.password:
         if email in DEMO_IDENTITIES:
             return _legacy_demo_login(db, email)
-        raise HTTPException(status_code=422, detail="Password is required. Create an account if you are new to Civic Pulse.")
+        raise HTTPException(status_code=422, detail="Password is required. Create an account if you are new to Swayam-sevak.")
     client = _supabase_auth_client()
     try:
         result = client.auth.sign_in_with_password({"email": email, "password": req.password})

@@ -157,7 +157,7 @@ async def test_full_http_flow(api, tmp_path):
 async def test_public_console_endpoints(api):
     async with httpx.AsyncClient(base_url=api, timeout=20) as c:
         home = await c.get("/")
-        assert home.status_code == 200 and "Civic Pulse" in home.text  # the React app, or the console fallback if unbuilt
+        assert home.status_code == 200 and "Swayam-sevak" in home.text  # the React app, or the console fallback if unbuilt
         for route in ["/schemes", "/schemes/engine", "/grievance", "/board", "/agent"]:
             assert (await c.get(route)).status_code == 200
         cfg = (await c.get("/app/config")).json()

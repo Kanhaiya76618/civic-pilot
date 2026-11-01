@@ -1,5 +1,5 @@
 """
-CivicPilot Evidence Storage Service
+Swayam-sevak Evidence Storage Service
 Handles secure upload and signing of multimedia evidence to Supabase Storage.
 Enforces strict MIME type, file extension, and file size constraints.
 """

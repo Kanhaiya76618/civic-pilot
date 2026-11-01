@@ -1,4 +1,4 @@
-# Civic Pulse: web app + Part 3 executor + sandbox portal in one container.
+# Swayam-sevak: web app + Part 3 executor + sandbox portal in one container.
 # Hugging Face Spaces (Docker SDK) or Render: one public port ($PORT, default 7860).
 
 # 1. Build the React app (web/) into static files.

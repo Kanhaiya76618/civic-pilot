@@ -1,4 +1,4 @@
-// Original flat illustrations in the Civic Pulse palette. Decorative unless given a title.
+// Original flat illustrations in the Swayam-sevak palette. Decorative unless given a title.
 import type { SVGProps } from "react";
 
 const C = {

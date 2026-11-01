@@ -68,7 +68,7 @@ def make_app(executor_factory=None) -> FastAPI:
         yield
         await executor.stop()
 
-    app = FastAPI(title="Civic Pulse Part 3: Execution Agent", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Swayam-sevak Part 3: Execution Agent", version="0.1.0", lifespan=lifespan)
 
     def ex() -> Executor:
         return state["executor"]
@@ -214,7 +214,7 @@ def make_app(executor_factory=None) -> FastAPI:
     @app.post("/v1/receipts/verify")
     async def verify_receipt(receipt: Receipt):
         valid = receipt.signer_key_id == ex().signer.key_id and verify(receipt, ex().signer.public_key_b64)
-        return {"valid": valid, "meaning": "The receipt is unchanged since Civic Pulse issued it. It does not prove the portal accepted the application."}
+        return {"valid": valid, "meaning": "The receipt is unchanged since Swayam-sevak issued it. It does not prove the portal accepted the application."}
 
     @app.post("/v1/admin/sandbox-variant", dependencies=[Depends(require_key)])
     async def sandbox_variant(body: SandboxVariant):
