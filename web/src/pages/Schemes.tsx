@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, BookOpen, CircleCheck, CircleX, ExternalLink, Info, LoaderCircle, Mic, Pause, Search, Square, Volume2, Workflow } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, type AppConfig, type Service } from "../api";
 import { SchemesArt } from "../components/Illustrations";
 import { ServiceForm } from "../components/ServiceForm";
@@ -117,10 +117,12 @@ function AnswerPanel({ ex, lang }: { ex: Explanation; lang: string }) {
 
 export default function Schemes() {
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [finder, setFinder] = useState<Service | null>(null);
-  const [q, setQ] = useState("");
-  const [lang, setLang] = useState("hi-IN");
+  const initialLanguage = searchParams.get("lang");
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
+  const [lang, setLang] = useState(() => LANGS.some((item) => item.code === initialLanguage) ? initialLanguage! : "hi-IN");
   const [busy, setBusy] = useState(false);
   const [ex, setEx] = useState<Explanation | null>(null);
   const [notConnected, setNotConnected] = useState(false);

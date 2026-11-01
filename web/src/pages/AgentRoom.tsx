@@ -78,7 +78,7 @@ function Pipeline({ s }: { s: TaskState }) {
         const Icon = n.icon;
         const state = n.done ? "done" : n.on ? (stopped ? "bad" : "on") : n.skip && TERMINAL.has(s.status) ? "skip" : "idle";
         const cls = {
-          done: "bg-emerald-400/15 text-emerald-200 ring-emerald-400/30", on: "bg-amber-400/15 text-amber-200 ring-amber-400/40 pulse-ring",
+          done: "border-b-2 border-leaf-500 bg-emerald-400/15 text-emerald-200 ring-emerald-400/30", on: "border-b-2 border-saffron-500 bg-saffron-400/15 text-saffron-100 ring-saffron-400/40 pulse-ring",
           bad: "bg-rose-400/15 text-rose-200 ring-rose-400/40", skip: "bg-white/[0.03] text-slate-500 ring-white/5 border-dashed", idle: "bg-white/5 text-slate-400 ring-white/10",
         }[state];
         return (

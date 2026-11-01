@@ -12,6 +12,7 @@ export default defineConfig({
     proxy: {
       "/app": api,
       "/v1": api,
+      "/api": api,
       "^/citizen/[^/]+/(state|approve|human|approval\\.png|final\\.png)": api,
       "^/citizen/[^/]+/live": { target: api, ws: true },
     },

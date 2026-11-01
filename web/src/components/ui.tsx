@@ -17,8 +17,8 @@ export function Logo({ size = 44, className = "" }: { size?: number; className?:
 
 export const TricolorStrip = ({ className = "h-1.5" }: { className?: string }) => <div className={`tricolor-bar w-full ${className}`} aria-hidden />;
 
-type BtnProps = ComponentProps<typeof motion.button> & { variant?: "primary" | "secondary" | "ghost" | "danger" | "saffron"; loading?: boolean };
-export function Button({ variant = "primary", loading, className = "", children, disabled, ...p }: BtnProps) {
+type BtnProps = ComponentProps<typeof motion.button> & { variant?: "primary" | "secondary" | "ghost" | "danger" | "saffron"; size?: "sm" | "md"; loading?: boolean };
+export function Button({ variant = "primary", size = "md", loading, className = "", children, disabled, ...p }: BtnProps) {
   const styles = {
     primary: "bg-navy-700 text-white hover:bg-navy-800 shadow-[0_8px_20px_-8px_rgb(19_48_107/0.6)]",
     saffron: "bg-saffron-500 text-navy-900 hover:bg-saffron-400 shadow-[0_8px_20px_-8px_rgb(255_153_51/0.7)]",
@@ -32,7 +32,7 @@ export function Button({ variant = "primary", loading, className = "", children,
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.15 }}
       disabled={disabled || loading}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${size === "sm" ? "min-h-9 rounded-lg px-3 py-1.5 text-sm" : "min-h-11 rounded-xl px-5 py-2.5"} ${styles} ${className}`}
       {...p}
     >
       {loading && <LoaderCircle className="size-4 animate-spin" aria-hidden />}

@@ -31,12 +31,13 @@
   --color-paper: #fffdf8;
 
   /* Agent room (dark) */
-  --color-night-950: #060a16;
-  --color-night-900: #0a1022;
-  --color-night-800: #10182f;
-  --color-night-700: #17213d;
-  --color-night-600: #222f55;
-  --color-night-400: #8a9ac4;
+  /* Agent room: Government-of-India navy surfaces, not generic hacker black. */
+  --color-night-950: #1B2942;
+  --color-night-900: #1B2942;
+  --color-night-800: #24344F;
+  --color-night-700: #2D3E59;
+  --color-night-600: #33455F;
+  --color-night-400: #A8B8CF;
 
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -47,7 +48,8 @@
     @apply font-sans text-slate-900 antialiased;
     background-color: var(--color-paper);
   }
-  h1, h2, h3, h4 { @apply font-display tracking-tight; }
+  h1, h2, h3, h4 { @apply font-display tracking-tight; line-height: 1.15; text-wrap: balance; }
+  p { text-wrap: pretty; }
   :focus-visible { outline: 3px solid var(--color-saffron-500); outline-offset: 2px; border-radius: 6px; }
   button, a, [role="button"] { cursor: pointer; touch-action: manipulation; }
 }
@@ -65,9 +67,9 @@
 @utility bg-night {
   background-color: var(--color-night-950);
   background-image:
-    radial-gradient(50rem 24rem at 0% 0%, rgb(255 153 51 / 0.10), transparent 60%),
-    radial-gradient(50rem 24rem at 100% 100%, rgb(19 136 8 / 0.10), transparent 60%),
-    radial-gradient(rgb(138 154 196 / 0.08) 1px, transparent 1px);
+    radial-gradient(50rem 24rem at 0% 0%, rgb(255 153 51 / 0.11), transparent 60%),
+    radial-gradient(50rem 24rem at 100% 100%, rgb(19 136 8 / 0.11), transparent 60%),
+    radial-gradient(rgb(168 184 207 / 0.09) 1px, transparent 1px);
   background-size: auto, auto, 22px 22px;
 }
 

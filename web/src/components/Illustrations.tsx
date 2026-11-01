@@ -203,6 +203,42 @@ export function StepArt({ step, ...p }: P & { step: 1 | 2 | 3 | 4 }) {
   );
 }
 
+/** Eligibility pre-check: a citizen answers a short, source-backed questionnaire on a phone. */
+export function EligibilityArt({ title, ...p }: P) {
+  return (
+    <svg viewBox="0 0 220 170" {...a11y(title)} {...p}>
+      <ellipse cx="110" cy="154" rx="82" ry="9" fill={C.navy} opacity="0.16" />
+      <path d="M22 104C26 42 88 15 149 30s65 75 33 105-140 29-160-31Z" fill={C.navy} opacity="0.2" />
+      <rect x="119" y="20" width="62" height="112" rx="13" fill={C.white} stroke={C.navySoft} strokeWidth="3" />
+      <rect x="126" y="32" width="48" height="15" rx="5" fill={C.saffronPale} />
+      {[58, 75, 92].map((y, i) => <g key={y}><rect x="128" y={y} width="32" height="6" rx="3" fill={C.navySoft} /><circle cx="169" cy={y + 3} r="5" fill={i < 2 ? C.leaf : C.saffron} /></g>)}
+      <path d="M84 72q19-11 39 0l8 58q-26 12-53 0z" fill={C.saffron} />
+      <path d="M91 74 121 129l-12 4-29-49z" fill={C.leaf} opacity="0.9" />
+      <circle cx="101" cy="51" r="19" fill={C.skin} />
+      <path d="M83 51c0-16 12-24 22-22 12 2 17 12 14 25-5-7-13-10-24-8-6 1-9 3-12 5z" fill={C.hair} />
+      <rect x="94" y="66" width="13" height="12" rx="4" fill={C.skin} />
+      <rect x="84" y="127" width="15" height="25" rx="7" fill={C.navy} /><rect x="109" y="127" width="15" height="25" rx="7" fill={C.navy} />
+      <path d="M116 84q16 4 23 16" stroke={C.skin} strokeWidth="10" fill="none" strokeLinecap="round" />
+      <g transform="translate(48 39)"><rect width="47" height="29" rx="12" fill={C.leaf} /><path d="M15 14l5 5 11-12" stroke={C.white} strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /></g>
+    </svg>
+  );
+}
+
+/** Accountability teaser: a signed receipt and map pin, illustrating traceable outcomes. */
+export function ReceiptArt({ title, ...p }: P) {
+  return (
+    <svg viewBox="0 0 230 190" {...a11y(title)} {...p}>
+      <ellipse cx="115" cy="172" rx="84" ry="10" fill={C.white} opacity="0.13" />
+      <path d="M18 128 82 42l126 71-55 47z" fill={C.navySoft} opacity="0.55" />
+      <path d="m51 142 68-76m-16 91 67-76" stroke={C.white} strokeWidth="4" opacity="0.75" />
+      <rect x="70" y="25" width="91" height="122" rx="14" fill={C.white} stroke={C.saffronSoft} strokeWidth="3" transform="rotate(6 115 86)" />
+      {[53, 67, 81, 95].map((y, i) => <rect key={y} x="88" y={y} width={i === 0 ? 40 : 54} height="6" rx="3" fill={i === 0 ? C.navy : C.navySoft} transform="rotate(6 115 86)" />)}
+      <g transform="translate(133 119)"><circle r="19" fill={C.leaf} /><path d="M-9 0l6 6 12-14" stroke={C.white} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></g>
+      <path d="M39 49c-13 0-24 10-24 24 0 18 24 42 24 42s24-24 24-42c0-14-11-24-24-24z" fill={C.saffron} /><circle cx="39" cy="73" r="8" fill={C.white} />
+    </svg>
+  );
+}
+
 export type Category = "Road and Bridges" | "Water Supply" | "Sanitation and Garbage" | "Street Lights" | "Pollution" | "Other";
 
 /** Clay-style category icons for grievance tiles. */
@@ -281,19 +317,13 @@ export function PlugArt({ title, ...p }: P) {
 export function SchemesArt({ title, ...p }: P) {
   return (
     <svg viewBox="0 0 320 240" {...a11y(title)} {...p}>
-      <path d="M30 120C30 50 100 14 170 20s140 46 130 120-80 96-160 90S30 190 30 120Z" fill={C.leafPale} />
-      <ellipse cx="150" cy="222" rx="80" ry="9" fill={C.navy} opacity="0.08" />
-      <rect x="120" y="150" width="18" height="66" rx="8" fill={C.navy} /><rect x="144" y="150" width="18" height="66" rx="8" fill={C.navy} />
-      <path d="M110 92q30-14 62 0l10 70q-40 14-82 0z" fill={C.leaf} />
-      <rect x="133" y="64" width="16" height="20" rx="6" fill={C.skinLight} />
-      <circle cx="141" cy="52" r="24" fill={C.skinLight} />
-      <path d="M117 50c2-20 16-28 30-26 14 2 22 14 18 30-6-10-18-14-30-12-8 1-14 4-18 8z" fill={C.hair} />
-      <rect x="150" y="100" width="88" height="60" rx="8" fill={C.white} stroke={C.saffron} strokeWidth="3" transform="rotate(-6 194 130)" />
-      {[114, 126, 138].map((y) => <rect key={y} x="162" y={y} width="62" height="6" rx="3" fill={C.navySoft} transform="rotate(-6 194 130)" />)}
-      <path d="M132 112q16 8 26 2" stroke={C.skinLight} strokeWidth="12" strokeLinecap="round" fill="none" />
-      <g transform="translate(206 26)"><rect width="74" height="40" rx="14" fill={C.saffron} /><text x="37" y="27" textAnchor="middle" fontSize="16" fontWeight="700" fill={C.white} fontFamily="Mukta, sans-serif">आपका हक़</text></g>
-      <g transform="translate(36 40)"><rect width="78" height="36" rx="14" fill={C.navy} /><text x="39" y="24" textAnchor="middle" fontSize="14" fontWeight="700" fill={C.white} fontFamily="Mukta, sans-serif">Your right</text></g>
-      <g transform="translate(250 150)"><circle r="20" fill={C.leaf} /><path d="M-8 0l6 6 11-12" stroke={C.white} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></g>
+      <defs><linearGradient id="scheme-guide" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#EEF2FB" /><stop offset="1" stopColor="#E6F5E2" /></linearGradient><filter id="scheme-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="7" stdDeviation="7" floodColor={C.navy} floodOpacity=".14" /></filter></defs>
+      <rect x="12" y="12" width="296" height="216" rx="30" fill="url(#scheme-guide)" />
+      <path d="M26 183c34-26 65-18 96-3s80 17 172-15v63H26z" fill={C.white} opacity=".78" />
+      <g filter="url(#scheme-shadow)"><rect x="36" y="48" width="112" height="132" rx="20" fill={C.white} /><rect x="36" y="48" width="112" height="30" rx="20" fill={C.navy} /><rect x="36" y="64" width="112" height="14" fill={C.navy} /><circle cx="55" cy="63" r="4" fill={C.saffron} /><rect x="67" y="58" width="56" height="9" rx="4.5" fill={C.white} opacity=".85" />{[94, 115, 136].map((y, index) => <g key={y}><circle cx="56" cy={y + 5} r="7" fill={index === 1 ? C.saffronPale : C.leafPale} /><path d={`M53 ${y + 5}l3 3 6-7`} stroke={index === 1 ? C.saffron : C.leaf} strokeWidth="2.3" fill="none" strokeLinecap="round" strokeLinejoin="round" /><rect x="70" y={y} width={index === 2 ? 54 : 64} height="10" rx="5" fill={C.navySoft} /></g>)}</g>
+      <g transform="translate(164 48)"><circle cx="46" cy="36" r="29" fill={C.skinLight} /><path d="M18 34c1-28 20-42 37-40 19 2 31 18 25 43-10-11-30-14-47-3-5 3-10 7-15 12z" fill={C.hair} /><circle cx="36" cy="38" r="2.5" fill={C.hair} /><circle cx="56" cy="38" r="2.5" fill={C.hair} /><path d="M39 52q7 5 14 0" stroke={C.hair} strokeWidth="2.5" fill="none" strokeLinecap="round" /><path d="M26 68h39v18H26z" fill={C.skinLight} /><path d="M13 85q33-17 66 0l10 72H4z" fill={C.leaf} /><path d="M17 87 80 150" stroke={C.saffronPale} strokeWidth="8" opacity=".9" /><path d="M17 100q-15 16-10 37" stroke={C.skinLight} strokeWidth="13" fill="none" strokeLinecap="round" /><path d="M78 100q17 10 26 19" stroke={C.skinLight} strokeWidth="13" fill="none" strokeLinecap="round" /><rect x="94" y="104" width="28" height="44" rx="6" fill={C.navy} transform="rotate(13 108 126)" /><rect x="99" y="110" width="18" height="25" rx="3" fill={C.white} transform="rotate(13 108 126)" /><path d="M102 119h12m-10 6h10" stroke={C.leaf} strokeWidth="2" transform="rotate(13 108 126)" /></g>
+      <g filter="url(#scheme-shadow)" transform="translate(214 151)"><rect width="72" height="37" rx="14" fill={C.saffron} /><path d="M16 18h23m-23 7h16" stroke={C.white} strokeWidth="3" strokeLinecap="round" /><circle cx="56" cy="19" r="9" fill={C.white} /><path d="M52 19l3 3 5-6" stroke={C.leaf} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></g>
+      <g transform="translate(181 22)"><rect width="95" height="29" rx="14" fill={C.navy} /><text x="47" y="20" textAnchor="middle" fontSize="12" fontWeight="700" fill={C.white} fontFamily="Mukta, sans-serif">Ask · Check · Apply</text></g>
     </svg>
   );
 }

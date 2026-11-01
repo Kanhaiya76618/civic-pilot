@@ -35,7 +35,12 @@ class TokenResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str
-    password: Optional[str] = None  # Mock/dev password
+    password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+class SignupRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=80)
+    email: str
+    password: str = Field(..., min_length=8, max_length=128)
 
 # ----------------- Grievance / Report Contracts -----------------
 

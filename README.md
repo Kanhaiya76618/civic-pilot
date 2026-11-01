@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph Backend["Live Unified Backend (FastAPI + Supabase)"]
-        AUTH["Dual-Role JWT Auth (Citizen vs Municipal Desk Admin)"]
+        AUTH["Supabase Auth + role-aware CivicPulse JWT"]
         DB[("Supabase PostgreSQL 17: Reports, Events, Schemes, Receipts")]
         STORAGE[("Supabase Storage: Evidence Bucket (MIME & 10MB capped)")]
         LEDGER["Ed25519 Verifiable Ledger (SHA-256 Hash Chaining)"]
@@ -117,6 +117,12 @@ SUPABASE_BUCKET=evidence
 DATABASE_MODE=supabase
 ```
 
+### 2a. Configure account access
+
+Citizen registration and sign-in use Supabase Auth with email and password. In the Supabase dashboard, add your local or deployed sign-in page (for example, `http://localhost:5173/signin`) to **Authentication → URL Configuration → Redirect URLs**. Hosted projects with email confirmation enabled will ask the citizen to verify their email before their first sign-in.
+
+Municipal accounts cannot self-register from the portal. Create or invite the officer in Supabase Auth, then give the matching CivicPulse profile the `admin` role. The seeded `admin@demo.in` record remains only an automated-test fixture; it is not a public municipal credential.
+
 ### 3. Seed Live Database (Idempotent)
 Populates demo users, 18 realistic ward reports, an SLA breach, a deduplicated pair, and a signed receipt:
 ```bash
@@ -151,7 +157,7 @@ Visit `http://localhost:5173` to explore the unified platform!
    - Submit report within 50m of existing crater: Demonstrate automatic 50m spatial deduplication (merge & upvote).
 
 3. **Municipal Operations Desk (`/admin`):**
-   - Click "Municipal Desk" in navbar: Officer session auto-authenticates as `admin@demo.in`.
+   - From the public landing page, choose **Municipal desk** and sign in with a provisioned municipal officer account. The desk is not exposed in the public navigation, and protected API actions still require an admin JWT.
    - Review the Triage Queue sorted by urgency: point out the red-flashing P1 emergency (SLA breached).
    - Test "Resolve with Proof Photo": demonstrate that closure is blocked without uploading an inspection proof photo.
    - Click "AutoFile CPGRAMS": Escalate ticket directly to the Part 3 Execution Agent.

@@ -29,7 +29,7 @@ from server.storage import upload_evidence, validate_file, StorageValidationErro
 from server.triage import compute_triage_decision
 from server.receipts import sign_receipt, verify_receipt
 from contracts.models import (
-    UserRead, TokenResponse, LoginRequest, CivicReportRead,
+    UserRead, TokenResponse, LoginRequest, SignupRequest, CivicReportRead,
     CivicReportCreate, ReportEventRead, ReceiptRead, ReceiptVerifyRequest,
     ReceiptVerifyResponse, SchemeRead, SchemeEligibilityQuery, SchemeEligibilityMatch
 )
@@ -40,25 +40,13 @@ router = APIRouter()
 # 1. AUTHENTICATION & DEMO ROLES
 # ==============================================================================
 
-@router.post("/api/v1/auth/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
-    """Logs in citizen or admin. Demo accounts: citizen@demo.in / admin@demo.in."""
-    user = db.query(User).filter(User.email == req.email.strip().lower()).first()
-    if not user:
-        # Auto-provision if demo login
-        role = "admin" if "admin" in req.email.lower() else "citizen"
-        name = "Municipal Admin" if role == "admin" else "Citizen User"
-        user = User(
-            id=str(uuid.uuid4()),
-            email=req.email.strip().lower(),
-            name=name,
-            role=role,
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+DEMO_IDENTITIES = {
+    "citizen@demo.in": ("Aarav Sharma", "citizen"),
+    "admin@demo.in": ("Priya Nair (Municipal Desk Admin)", "admin"),
+}
 
+def _app_token_response(user: User) -> JSONResponse:
+    """Issue CivicPulse's short-lived app token after Supabase has authenticated a user."""
     token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
     response = JSONResponse(content={
         "access_token": token,
@@ -74,6 +62,99 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
     # Set httpOnly cookie for web client
     response.set_cookie(key="access_token", value=token, httponly=True, max_age=86400 * 7, samesite="lax")
     return response
+
+def _supabase_auth_client():
+    """Use the publishable key for end-user credentials; keep the service key out of this path."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Supabase Auth is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.")
+    try:
+        from supabase import create_client
+        return create_client(url, key)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Supabase Auth is unavailable. Please try again shortly.") from exc
+
+def _profile_name(auth_user: Any, fallback: Optional[str] = None) -> str:
+    metadata = getattr(auth_user, "user_metadata", None) or {}
+    return str(metadata.get("name") or fallback or "Citizen User").strip()[:80]
+
+def _sync_authenticated_user(db: Session, email: str, name: Optional[str]) -> User:
+    """Mirror a verified Supabase identity into the civic data store without trusting a client role."""
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        if name and user.name != name:
+            user.name = name
+            db.commit()
+            db.refresh(user)
+        return user
+    user = User(
+        id=str(uuid.uuid4()), email=email, name=name or "Citizen User", role="citizen",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+def _legacy_demo_login(db: Session, email: str) -> JSONResponse:
+    """Compatibility bridge for the seeded test accounts only; the web UI never calls this path."""
+    name, role = DEMO_IDENTITIES[email]
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        user = User(id=str(uuid.uuid4()), email=email, name=name, role=role, created_at=datetime.now(timezone.utc))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return _app_token_response(user)
+
+@router.post("/api/v1/auth/signup")
+def signup(req: SignupRequest, db: Session = Depends(get_db)):
+    """Create a citizen identity in Supabase Auth. Municipal roles are provisioned, never self-selected."""
+    email = req.email.strip().lower()
+    client = _supabase_auth_client()
+    redirect_to = f"{os.getenv('CIVIC_PUBLIC_URL', 'http://localhost:5173').rstrip('/')}/signin?confirmed=1"
+    try:
+        result = client.auth.sign_up({
+            "email": email,
+            "password": req.password,
+            "options": {"data": {"name": req.name.strip()}, "email_redirect_to": redirect_to},
+        })
+    except Exception as exc:
+        message = str(exc)
+        if "already" in message.lower():
+            message = "An account may already exist for this email. Try signing in or check your inbox."
+        raise HTTPException(status_code=400, detail=message) from exc
+
+    # Hosted Supabase projects normally require email confirmation. Do not mint a local session first.
+    if not getattr(result, "session", None):
+        return JSONResponse(status_code=202, content={
+            "status": "confirmation_required",
+            "message": "Check your inbox to confirm your email, then return here to sign in.",
+        })
+    user = _sync_authenticated_user(db, email, req.name.strip())
+    return _app_token_response(user)
+
+@router.post("/api/v1/auth/login", response_model=TokenResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    """Password sign-in through Supabase Auth; the local user row controls civic authorization only."""
+    email = req.email.strip().lower()
+    # Existing automated tests and seeded local demo remain usable, but the browser UI always submits a password.
+    if not req.password:
+        if email in DEMO_IDENTITIES:
+            return _legacy_demo_login(db, email)
+        raise HTTPException(status_code=422, detail="Password is required. Create an account if you are new to Civic Pulse.")
+    client = _supabase_auth_client()
+    try:
+        result = client.auth.sign_in_with_password({"email": email, "password": req.password})
+    except Exception as exc:
+        # Keep failed-login feedback generic so account existence is not disclosed.
+        raise HTTPException(status_code=401, detail="Email or password is incorrect. Please try again.") from exc
+    auth_user = getattr(result, "user", None)
+    if not auth_user or not getattr(auth_user, "email", None):
+        raise HTTPException(status_code=401, detail="Email or password is incorrect. Please try again.")
+    user = _sync_authenticated_user(db, auth_user.email.strip().lower(), _profile_name(auth_user))
+    return _app_token_response(user)
 
 
 @router.get("/api/v1/auth/me", response_model=UserRead)

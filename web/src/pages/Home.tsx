@@ -1,171 +1,113 @@
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, BadgeCheck, Bot, FileCheck2, Hand, KeyRound, Megaphone, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  ArrowRight, BadgeCheck, Bot, BookOpen, BriefcaseBusiness, Check, CircleCheck, FileCheck2, Hand, HeartPulse,
+  House, KeyRound, Landmark, Map, Megaphone, Mic, Search, ShieldCheck, Sprout, Square,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api, secs, type Run } from "../api";
-import { AgentArt, HeroScene, KnowArt, ReportArt, StepArt } from "../components/Illustrations";
+import { AgentArt, EligibilityArt, HeroScene, KnowArt, ReceiptArt, ReportArt, StepArt } from "../components/Illustrations";
 import { Button, Card, CountUp, fadeUp, SectionTitle, stagger } from "../components/ui";
-import { useI18n } from "../i18n";
+import { useI18n, type StringKey } from "../i18n";
+
+type Language = "en-IN" | "hi-IN" | "ta-IN" | "bn-IN" | "mr-IN" | "te-IN";
+type CategoryKey = "education" | "farming" | "housing" | "health" | "business" | "employment";
+
+const LANGUAGES: { code: Language; key: StringKey }[] = [
+  { code: "en-IN", key: "languageEnglish" }, { code: "hi-IN", key: "languageHindi" }, { code: "ta-IN", key: "languageTamil" },
+  { code: "bn-IN", key: "languageBengali" }, { code: "mr-IN", key: "languageMarathi" }, { code: "te-IN", key: "languageTelugu" },
+];
+
+const CATEGORIES: { id: CategoryKey; icon: typeof BookOpen; title: StringKey; body: StringKey; tint: string }[] = [
+  { id: "education", icon: BookOpen, title: "categoryEducation", body: "categoryEducationBody", tint: "bg-saffron-50 text-saffron-700 ring-saffron-200" },
+  { id: "farming", icon: Sprout, title: "categoryFarming", body: "categoryFarmingBody", tint: "bg-leaf-50 text-leaf-700 ring-leaf-200" },
+  { id: "housing", icon: House, title: "categoryHousing", body: "categoryHousingBody", tint: "bg-navy-50 text-navy-700 ring-navy-200" },
+  { id: "health", icon: HeartPulse, title: "categoryHealth", body: "categoryHealthBody", tint: "bg-leaf-50 text-leaf-700 ring-leaf-200" },
+  { id: "business", icon: BriefcaseBusiness, title: "categoryBusiness", body: "categoryBusinessBody", tint: "bg-saffron-50 text-saffron-700 ring-saffron-200" },
+  { id: "employment", icon: Landmark, title: "categoryEmployment", body: "categoryEmploymentBody", tint: "bg-navy-50 text-navy-700 ring-navy-200" },
+];
 
 function Floating({ children, className, delay = 0 }: { children: React.ReactNode; className: string; delay?: number }) {
   const reduce = useReducedMotion();
-  return (
-    <motion.div className={`glass absolute flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold text-navy-900 ${className}`}
-      initial={{ opacity: 0, scale: 0.9 }} animate={reduce ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 1, y: [0, -6, 0] }}
-      transition={{ opacity: { delay, duration: 0.4 }, scale: { delay, duration: 0.4 }, y: { delay, duration: 4, repeat: Infinity, ease: "easeInOut" } }}>
-      {children}
-    </motion.div>
-  );
+  return <motion.div className={`glass absolute flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold text-navy-900 ${className}`}
+    initial={{ opacity: 0, scale: 0.9 }} animate={reduce ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 1, y: [0, -6, 0] }}
+    transition={{ opacity: { delay, duration: 0.4 }, scale: { delay, duration: 0.4 }, y: { delay, duration: 4, repeat: Infinity, ease: "easeInOut" } }}>{children}</motion.div>;
 }
 
 function WhatsNew({ runs }: { runs: Run[] }) {
   const reduce = useReducedMotion();
-  const items = runs.filter((r) => r.status === "completed").slice(0, 8).map((r) =>
-    r.service_id === "find_schemes" ? `Live myScheme lookup finished · ${r.results ?? 0} schemes · ${secs(r.timing.agent_ms)}`
-      : r.reference_no ? `Grievance filed in the sandbox · ${r.reference_no}` : `${r.service} · ${r.outcome?.replace(/_/g, " ")}`);
+  const items = runs.filter((run) => run.status === "completed").slice(0, 8).map((run) =>
+    run.service_id === "find_schemes" ? `Live myScheme lookup finished · ${run.results ?? 0} schemes · ${secs(run.timing.agent_ms)}`
+      : run.reference_no ? `Grievance filed in the sandbox · ${run.reference_no}` : `${run.service} · ${run.outcome?.replace(/_/g, " ")}`);
   if (!items.length) return null;
-  return (
-    <div className="border-y border-saffron-200 bg-saffron-50/90">
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 text-sm">
-        <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-saffron-500 px-2 py-0.5 text-xs font-bold text-navy-900"><Megaphone className="size-3.5" />What's new</span>
-        <div className="relative flex-1 overflow-hidden" aria-live="off">
-          <motion.div className="flex w-max gap-10 whitespace-nowrap text-navy-800" animate={reduce ? {} : { x: ["0%", "-50%"] }} transition={{ duration: 40, repeat: Infinity, ease: "linear" }}>
-            {[...items, ...items].map((t, i) => <span key={i}>• {t}</span>)}
-          </motion.div>
-        </div>
-      </div>
+  return <div className="border-y border-saffron-200 bg-saffron-50/90"><div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 text-sm">
+    <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-saffron-500 px-2 py-0.5 text-xs font-bold text-navy-900"><Megaphone className="size-3.5" />What&apos;s new</span>
+    <div className="relative flex-1 overflow-hidden" aria-live="off"><motion.div className="flex w-max gap-10 whitespace-nowrap text-navy-800" animate={reduce ? {} : { x: ["0%", "-50%"] }} transition={{ duration: 40, repeat: Infinity, ease: "linear" }}>{[...items, ...items].map((text, index) => <span key={index}>• {text}</span>)}</motion.div></div>
+  </div></div>;
+}
+
+function HeroSearch() {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [question, setQuestion] = useState("");
+  const [language, setLanguage] = useState<Language>("hi-IN");
+  const [listening, setListening] = useState(false);
+  const recognition = useRef<any>(null);
+  const hasSpeech = Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const startSpeech = () => {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) return;
+    const r = new Recognition(); r.lang = language; r.interimResults = false; r.maxAlternatives = 1;
+    r.onresult = (event: any) => setQuestion((value) => value ? `${value} ${event.results[0][0].transcript}` : event.results[0][0].transcript);
+    r.onend = () => setListening(false); r.onerror = () => setListening(false); recognition.current = r; r.start(); setListening(true);
+  };
+  const submit = (event: FormEvent) => { event.preventDefault(); if (question.trim()) navigate(`/schemes?q=${encodeURIComponent(question.trim())}&lang=${encodeURIComponent(language)}`); };
+  return <motion.form variants={fadeUp} onSubmit={submit} className="glass mt-7 rounded-3xl p-3 shadow-[0_14px_42px_-24px_rgb(19_48_107/0.45)]">
+    <label htmlFor="home-question" className="sr-only">{t("homeSearchLabel")}</label>
+    <div className="flex items-center gap-2"><Search className="ml-2 size-5 shrink-0 text-navy-400" aria-hidden /><input id="home-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t("homeSearchPlaceholder")} className="min-h-12 min-w-0 flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-500" />
+      {hasSpeech && <button type="button" onClick={() => listening ? recognition.current?.stop() : startSpeech()} aria-label={listening ? t("homeStopListening") : t("homeSpeak")} className={`grid size-11 shrink-0 place-items-center rounded-xl transition-colors ${listening ? "pulse-ring bg-saffron-500 text-navy-900" : "bg-navy-50 text-navy-700 hover:bg-navy-100"}`}>{listening ? <Square className="size-4" /> : <Mic className="size-5" />}</button>}
+      <Button type="submit" className="!rounded-2xl !px-4 sm:!px-5"><span className="hidden sm:inline">{t("homeAsk")}</span><ArrowRight className="size-4 sm:hidden" /></Button>
     </div>
-  );
+    <div className="mt-2 flex flex-wrap gap-1.5 px-2 pb-1">{LANGUAGES.map((item) => <button type="button" key={item.code} onClick={() => setLanguage(item.code)} className={`min-h-8 rounded-full px-3 py-1 text-sm font-semibold transition-colors ${language === item.code ? "bg-navy-700 text-white" : "bg-white text-navy-700 ring-1 ring-navy-100 hover:ring-navy-300"}`}>{t(item.key)}</button>)}</div>
+  </motion.form>;
+}
+
+function EligibilityStepper() {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const [step, setStep] = useState(0), [category, setCategory] = useState<CategoryKey | null>(null), [age, setAge] = useState(28), [income, setIncome] = useState(250000), [state, setState] = useState("");
+  const labels: StringKey[] = ["homeStepNeed", "homeStepDetails", "homeStepResult"];
+  const selected = CATEGORIES.find((item) => item.id === category);
+  const canAdvance = step === 0 ? Boolean(category) : step === 1 ? Boolean(state) : true;
+  const next = (target: number) => { if (target <= step || canAdvance) setStep(target); };
+  const stateLabel = state === "karnataka" ? "stateKarnataka" : state === "maharashtra" ? "stateMaharashtra" : state === "delhi" ? "stateDelhi" : "stateOther";
+  return <div id="eligibility-check" className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+    <Card variant="plain" className="p-5 sm:p-7">
+      <ol className="mb-8 grid gap-3 sm:grid-cols-3" aria-label={t("homeEligibilityTitle")}>{labels.map((label, index) => { const done = index < step, active = index === step; return <li key={label} className="flex min-w-0 items-center gap-2"><button type="button" onClick={() => index <= step && next(index)} aria-current={active ? "step" : undefined} className={`grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold ring-1 transition-colors ${done ? "bg-leaf-500 text-white ring-leaf-500" : active ? "bg-navy-700 text-white ring-navy-700" : "bg-white text-slate-500 ring-slate-200"}`}>{done ? <Check className="size-4" /> : index + 1}</button><span className={`text-sm font-bold ${active ? "text-navy-900" : "text-slate-600"}`}>{t(label)}</span>{index < labels.length - 1 && <span className={`ml-auto hidden h-px flex-1 sm:block ${done ? "bg-leaf-500" : "bg-slate-200"}`} aria-hidden />}</li>; })}</ol>
+      {step === 0 && <motion.div key="need" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}><h3 className="text-2xl font-extrabold text-navy-900">{t("homeStepNeed")}</h3><p className="mt-2 text-slate-600">{t("homeChooseCategory")}</p><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{CATEGORIES.map((item) => { const Icon = item.icon; const isSelected = category === item.id; return <button type="button" key={item.id} onClick={() => setCategory(item.id)} aria-pressed={isSelected} className={`min-h-28 rounded-2xl border p-4 text-left transition-all ${isSelected ? "border-navy-500 bg-navy-50 shadow-sm ring-2 ring-navy-200" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-navy-200 hover:shadow-md"}`}><span className={`grid size-10 place-items-center rounded-xl ring-1 ${item.tint}`}><Icon className="size-5" /></span><span className="mt-3 block font-bold text-navy-900">{t(item.title)}</span></button>; })}</div></motion.div>}
+      {step === 1 && <motion.div key="details" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}><h3 className="text-2xl font-extrabold text-navy-900">{t("homeStepDetails")}</h3><p className="mt-2 text-slate-600">{selected ? t(selected.title) : t("homeChooseCategory")}</p><div className="mt-6 grid gap-5 sm:grid-cols-2"><label className="rounded-2xl bg-navy-50 p-4"><span className="flex justify-between gap-3 font-bold text-navy-900"><span>{t("homeAge")}</span><output>{age}</output></span><input aria-label={t("homeAge")} type="range" min="18" max="80" value={age} onChange={(event) => setAge(Number(event.target.value))} className="mt-5 w-full accent-[#13306B]" /></label><label className="rounded-2xl bg-leaf-50 p-4"><span className="flex justify-between gap-3 font-bold text-navy-900"><span>{t("homeIncome")}</span><output>₹{income.toLocaleString("en-IN")}</output></span><input aria-label={t("homeIncome")} type="range" min="50000" max="1000000" step="50000" value={income} onChange={(event) => setIncome(Number(event.target.value))} className="mt-5 w-full accent-[#138808]" /></label><label className="sm:col-span-2"><span className="mb-2 block text-sm font-bold text-navy-900">{t("homeState")}</span><select value={state} onChange={(event) => setState(event.target.value)} className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-slate-900 outline-none focus:border-navy-500 focus:ring-2 focus:ring-navy-200"><option value="">{t("homeChooseState")}</option><option value="karnataka">{t("stateKarnataka")}</option><option value="maharashtra">{t("stateMaharashtra")}</option><option value="delhi">{t("stateDelhi")}</option><option value="other">{t("stateOther")}</option></select></label></div></motion.div>}
+      {step === 2 && <motion.div key="result" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl bg-leaf-50 p-5 ring-1 ring-leaf-200 sm:p-7"><motion.span initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 280, damping: 18 }} className="grid size-14 place-items-center rounded-full bg-leaf-500 text-white shadow-lg shadow-leaf-500/20"><CircleCheck className="size-8" /></motion.span><h3 className="mt-4 text-2xl font-extrabold text-navy-900">{t("homeReadyTitle")}</h3><p className="mt-2 max-w-2xl leading-relaxed text-slate-700">{t("homeReadyBody")}</p><div className="mt-5 flex flex-wrap gap-2 text-sm font-semibold text-navy-800"><span className="rounded-full bg-white px-3 py-1 ring-1 ring-leaf-200">{selected ? t(selected.title) : t("homeStepNeed")}</span><span className="rounded-full bg-white px-3 py-1 ring-1 ring-leaf-200">{t("homeState")}: {state ? t(stateLabel) : "–"}</span></div><Button variant="primary" className="mt-6" onClick={() => navigate(`/schemes?category=${encodeURIComponent(category ?? "")}&age=${age}&income=${income}&state=${encodeURIComponent(state)}`)}>{t("homeFindSchemes")}<ArrowRight className="size-4" /></Button></motion.div>}
+      <div className="mt-7 flex flex-wrap justify-between gap-3 border-t border-slate-100 pt-5"><Button variant="ghost" onClick={() => next(Math.max(0, step - 1))} disabled={step === 0}>{t("homeBack")}</Button>{step < 2 && <Button variant="primary" onClick={() => next(step + 1)} disabled={!canAdvance}>{t("homeContinue")}<ArrowRight className="size-4" /></Button>}</div>
+    </Card>
+    <aside className="overflow-hidden rounded-3xl bg-[#1F2D50] p-6 text-white shadow-[0_20px_45px_-28px_rgb(10_26_61/0.9)] sm:p-7"><EligibilityArt className="mx-auto h-40 w-auto" title={t("homeEligibilityArt")} /><ul className="mt-5 space-y-4">{["homeTakesTwoMinutes", "homeNoDocs", "homePrivateDetails"].map((item) => <li key={item} className="flex items-start gap-3 text-sm font-medium text-slate-100"><CircleCheck className="mt-0.5 size-5 shrink-0 text-saffron-400" />{t(item as StringKey)}</li>)}</ul><div className="mt-6 border-t border-white/15 pt-5"><p className="text-sm font-semibold text-saffron-300">{t("homeAskLanguage")}</p><div className="mt-3 flex gap-2"><span className="rounded-full bg-white/10 px-3 py-1 text-sm">{t("languageEnglish")}</span><span className="rounded-full bg-white/10 px-3 py-1 text-sm">{t("languageHindi")}</span></div></div></aside>
+  </div>;
 }
 
 export default function Home() {
   const { t } = useI18n();
   const [runs, setRuns] = useState<Run[]>([]);
   useEffect(() => { api.runs().then(setRuns).catch(() => {}); }, []);
-  const stats = useMemo(() => {
-    const done = runs.filter((r) => r.status === "completed");
-    const lookups = done.filter((r) => r.service_id === "find_schemes");
-    const times = lookups.map((r) => r.timing.agent_ms ?? 0).sort((a, b) => a - b);
-    return {
-      total: runs.length, completed: done.length,
-      filings: done.filter((r) => r.reference_no).length,
-      median: times.length ? times[Math.floor(times.length / 2)] / 1000 : 0,
-    };
-  }, [runs]);
-
-  const pillars = [
-    { art: KnowArt, title: t("navSchemes"), part: "Part 1", body: "Ask in your language. See which schemes you can get, with the official source, and listen to the answer.", to: "/schemes", cta: t("ctaSchemes"), tint: "from-leaf-50" },
-    { art: ReportArt, title: t("navGrievance"), part: "Part 2", body: "Photograph a pothole or a leak. We locate it, sort it, and track it in public until it is fixed.", to: "/grievance", cta: t("ctaReport"), tint: "from-saffron-50" },
-    { art: AgentArt, title: "Get it done", part: "Part 3", body: "Our agent fills the government portal in a real browser. You type the OTP and approve. You get a signed receipt.", to: "/agent", cta: "Watch the agent", tint: "from-navy-50" },
-  ];
-  const steps = [
-    { n: 1 as const, title: "Tell us", body: "Answer a few questions, in English or Hindi." },
-    { n: 2 as const, title: "The agent fills it", body: "Live, on the portal, step by step in plain words." },
-    { n: 3 as const, title: "You approve", body: "You type the OTP and CAPTCHA and give the final yes." },
-    { n: 4 as const, title: "You get a receipt", body: "A signed record with the portal's reference number." },
-  ];
-
-  return (
-    <>
-      <section className="relative overflow-hidden">
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 lg:grid-cols-2 lg:pt-16">
-          <motion.div initial="hidden" animate="show" variants={stagger}>
-            <motion.p variants={fadeUp} className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-saffron-700 ring-1 ring-saffron-200">
-              <span className="size-2 rounded-full bg-leaf-500" />{t("heroKicker")}
-            </motion.p>
-            <motion.h1 variants={fadeUp} className="text-4xl font-extrabold leading-[1.08] text-navy-900 sm:text-5xl lg:text-6xl">{t("heroTitle")}</motion.h1>
-            <motion.p variants={fadeUp} className="mt-5 max-w-xl text-lg leading-relaxed text-slate-700">{t("heroBody")}</motion.p>
-            <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
-              <Link to="/schemes"><Button variant="saffron" className="text-base">{t("ctaSchemes")}<ArrowRight className="size-4" /></Button></Link>
-              <Link to="/grievance"><Button variant="primary" className="text-base">{t("ctaReport")}</Button></Link>
-              <Link to="/agent"><Button variant="ghost" className="text-base"><Bot className="size-4" />{t("watchAgent")}</Button></Link>
-            </motion.div>
-            <motion.ul variants={fadeUp} className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-slate-700">
-              {[t("bulletLive"), t("bulletOtp"), t("bulletYes")].map((x) => (
-                <li key={x} className="flex items-center gap-1.5"><BadgeCheck className="size-4 text-leaf-600" />{x}</li>
-              ))}
-            </motion.ul>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="relative">
-            <Card variant="glass" className="p-4 sm:p-6"><HeroScene className="h-auto w-full" title="A citizen approves on her phone while the agent fills a portal form" /></Card>
-            <Floating className="-left-2 top-6 sm:-left-6" delay={0.4}><KeyRound className="size-4 text-saffron-600" />OTP typed by you</Floating>
-            <Floating className="-right-2 top-[62%] sm:-right-6" delay={0.7}><ShieldCheck className="size-4 text-leaf-600" />AI never sees your bank details</Floating>
-            <Floating className="bottom-6 left-8" delay={1}><FileCheck2 className="size-4 text-navy-600" />Signed receipt</Floating>
-          </motion.div>
-        </div>
-      </section>
-
-      <WhatsNew runs={runs} />
-
-      <section className="mx-auto max-w-7xl px-4 py-16">
-        <SectionTitle kicker="Civic Pulse" title={t("pillarsTitle")}>One place to understand your rights, raise a problem, and get the paperwork done, with a person in control at every step.</SectionTitle>
-        <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="grid gap-6 md:grid-cols-3">
-          {pillars.map((p) => (
-            <motion.div key={p.title} variants={fadeUp} whileHover={{ y: -6 }} className={`clay flex flex-col bg-gradient-to-b ${p.tint} to-white p-6`}>
-              <p.art className="h-32 w-auto self-start" />
-              <span className="mt-4 w-fit rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-navy-600 ring-1 ring-navy-100">{p.part}</span>
-              <h3 className="mt-2 text-2xl font-extrabold text-navy-900">{p.title}</h3>
-              <p className="mt-2 flex-1 text-slate-600">{p.body}</p>
-              <Link to={p.to} className="mt-5 inline-flex items-center gap-1.5 font-bold text-navy-700 hover:gap-2.5 hover:text-saffron-700">{p.cta}<ArrowRight className="size-4" /></Link>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
-
-      <section className="bg-white/60 py-16">
-        <div className="mx-auto max-w-7xl px-4">
-          <SectionTitle kicker="Simple, step by step" title={t("howTitle")} />
-          <motion.ol initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="relative grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="tricolor-bar absolute left-[12%] right-[12%] top-14 hidden h-1 rounded-full opacity-60 lg:block" aria-hidden />
-            {steps.map((s) => (
-              <motion.li key={s.n} variants={fadeUp} className="relative flex flex-col items-center text-center">
-                <div className="clay grid size-28 place-items-center bg-white"><StepArt step={s.n} className="h-20 w-auto" /></div>
-                <span className="mt-4 grid size-8 place-items-center rounded-full bg-navy-700 text-sm font-bold text-white">{s.n}</span>
-                <h3 className="mt-2 text-lg font-bold text-navy-900">{s.title}</h3>
-                <p className="mt-1 max-w-[16rem] text-slate-600">{s.body}</p>
-              </motion.li>
-            ))}
-          </motion.ol>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 py-16">
-        <SectionTitle kicker="Not a mock-up" title={t("liveTitle")}>Counted from real runs on this server: live lookups on myScheme.gov.in and filings in the sandbox replica.</SectionTitle>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { v: stats.total, label: "Tasks started", dec: 0, suf: "" },
-            { v: stats.completed, label: "Completed", dec: 0, suf: "" },
-            { v: stats.filings, label: "Filed with approval", dec: 0, suf: "" },
-            { v: stats.median, label: "Median myScheme lookup", dec: 1, suf: "s" },
-          ].map((s) => (
-            <Card key={s.label} variant="glass" className="p-6">
-              <div className="font-display text-4xl font-extrabold text-navy-900"><CountUp value={s.v} decimals={s.dec} suffix={s.suf} /></div>
-              <div className="mt-1 text-sm font-medium text-slate-600">{s.label}</div>
-            </Card>
-          ))}
-        </div>
-        <Link to="/agent" className="mt-6 inline-flex items-center gap-1.5 font-bold text-navy-700 hover:text-saffron-700">Open the agent room<ArrowRight className="size-4" /></Link>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 pb-6">
-        <div className="clay overflow-hidden bg-navy-800 p-8 text-white sm:p-10">
-          <h2 className="text-3xl font-extrabold">{t("trustTitle")}</h2>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { icon: ShieldCheck, t: "Your consent first", b: "Every task starts with your explicit consent, limited to one portal and 24 hours." },
-              { icon: KeyRound, t: "Private stays private", b: "Bank, phone and email are encrypted. The AI only ever sees placeholders." },
-              { icon: Hand, t: "You hold the keys", b: "You type OTPs and CAPTCHAs yourself. Nothing is filed without your yes." },
-              { icon: FileCheck2, t: "Proof you can check", b: "Receipts are signed, so anyone can verify they were not changed later." },
-            ].map((x) => (
-              <div key={x.t} className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10">
-                <x.icon className="size-6 text-saffron-400" aria-hidden />
-                <h3 className="mt-3 font-bold">{x.t}</h3>
-                <p className="mt-1 text-sm text-navy-100">{x.b}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
-  );
+  const stats = useMemo(() => { const done = runs.filter((run) => run.status === "completed"), lookups = done.filter((run) => run.service_id === "find_schemes"), times = lookups.map((run) => run.timing.agent_ms ?? 0).sort((a, b) => a - b), filings = done.filter((run) => run.reference_no).length; return { total: runs.length, completed: done.length, filings, receipts: filings, median: times.length ? times[Math.floor(times.length / 2)] / 1000 : 0 }; }, [runs]);
+  const pillars = [{ art: KnowArt, title: t("navSchemes"), part: t("homePart1"), body: t("homePillarBody1"), to: "/schemes", cta: t("ctaSchemes"), tint: "from-leaf-50" }, { art: ReportArt, title: t("navGrievance"), part: t("homePart2"), body: t("homePillarBody2"), to: "/grievance", cta: t("ctaReport"), tint: "from-saffron-50" }, { art: AgentArt, title: t("homeGetItDone"), part: t("homePart3"), body: t("homePillarBody3"), to: "/agent", cta: t("watchAgent"), tint: "from-navy-50" }];
+  const steps = [{ n: 1 as const, title: t("homeHowAsk"), body: t("homeHowAskBody") }, { n: 2 as const, title: t("homeHowCheck"), body: t("homeHowCheckBody") }, { n: 3 as const, title: t("homeHowApply"), body: t("homeHowApplyBody") }, { n: 4 as const, title: t("homeHowTrack"), body: t("homeHowTrackBody") }];
+  return <>
+    <section className="relative overflow-hidden"><div className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-12 pt-10 lg:grid-cols-2 lg:pt-16"><motion.div initial="hidden" animate="show" variants={stagger}><motion.p variants={fadeUp} className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-sm font-bold text-saffron-700 ring-1 ring-saffron-200"><span className="size-2 rounded-full bg-leaf-500" />{t("heroKicker")}</motion.p><motion.h1 variants={fadeUp} className="text-4xl font-extrabold leading-[1.08] text-navy-900 sm:text-5xl lg:text-6xl">{t("heroTitle")}</motion.h1><motion.p variants={fadeUp} className="mt-5 max-w-xl text-lg leading-relaxed text-slate-700">{t("heroBody")}</motion.p><HeroSearch /><motion.ul variants={fadeUp} className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-slate-700">{[t("bulletLive"), t("bulletOtp"), t("bulletYes")].map((item) => <li key={item} className="flex items-center gap-1.5"><BadgeCheck className="size-4 text-leaf-600" />{item}</li>)}</motion.ul></motion.div><motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="relative"><Card variant="glass" className="p-4 sm:p-6"><HeroScene className="h-auto w-full" title={t("heroTitle")} /></Card><Floating className="-left-2 top-6 sm:-left-6" delay={0.4}><KeyRound className="size-4 text-saffron-600" />{t("bulletOtp")}</Floating><Floating className="-right-2 top-[62%] sm:-right-6" delay={0.7}><ShieldCheck className="size-4 text-leaf-600" />{t("homeTrustPrivate")}</Floating><Floating className="bottom-6 left-8" delay={1}><FileCheck2 className="size-4 text-navy-600" />{t("homeTrustReceipts")}</Floating></motion.div></div><div className="border-y border-navy-100 bg-white/70"><div className="mx-auto grid max-w-7xl divide-y divide-navy-100 px-4 sm:grid-cols-3 sm:divide-x sm:divide-y-0">{[{ value: stats.total, label: t("homeTrustTasks") }, { value: stats.filings, label: t("homeTrustFilings") }, { value: stats.receipts, label: t("homeTrustReceipts") }].map((item) => <div key={item.label} className="flex items-center gap-3 py-4 sm:justify-center"><span className="font-display text-2xl font-extrabold text-navy-900"><CountUp value={item.value} /></span><span className="text-sm font-semibold text-slate-600">{item.label}</span></div>)}</div></div></section>
+    <WhatsNew runs={runs} />
+    <section className="mx-auto max-w-7xl px-4 py-16"><SectionTitle kicker={t("homeCategoryKicker")} title={t("homeCategoryTitle")}>{t("homeCategoryBody")}</SectionTitle><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{CATEGORIES.map((item, index) => { const Icon = item.icon; return <Card key={item.id} variant="plain" className="group flex flex-col rounded-2xl p-5 transition duration-200 hover:-translate-y-1 hover:shadow-md"><span className={`grid size-11 place-items-center rounded-xl ring-1 ${item.tint}`}><Icon className="size-5" /></span><h3 className="mt-4 text-xl font-extrabold text-navy-900">{t(item.title)}</h3><p className="mt-2 flex-1 text-slate-600">{t(item.body)}</p>{index < 2 && <span className="mt-4 w-fit rounded-full bg-saffron-50 px-2.5 py-1 text-xs font-bold text-saffron-700 ring-1 ring-saffron-200">{t("homeDeadline")}</span>}<div className="mt-5 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => document.getElementById("eligibility-check")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="min-h-11 rounded-xl border border-navy-300 px-3 text-sm font-bold text-navy-700 transition hover:bg-navy-50">{t("homeEligibility")}</button><Link to="/agent" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-navy-700 px-3 text-sm font-bold text-white transition hover:bg-navy-800">{t("homeApply")}</Link></div></Card>; })}</div></section>
+    <section className="bg-white/60 py-16"><div className="mx-auto max-w-7xl px-4"><SectionTitle kicker={t("homeEligibilityKicker")} title={t("homeEligibilityTitle")}>{t("homeEligibilityBody")}</SectionTitle><EligibilityStepper /></div></section>
+    <section className="mx-auto max-w-7xl px-4 py-16"><SectionTitle kicker={t("homeHowKicker")} title={t("howTitle")} /><motion.ol initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger} className="relative grid gap-6 sm:grid-cols-2 lg:grid-cols-4"><div className="tricolor-bar absolute left-[12%] right-[12%] top-14 hidden h-1 rounded-full opacity-60 lg:block" aria-hidden />{steps.map((item) => <motion.li key={item.n} variants={fadeUp} className="relative flex flex-col items-center text-center"><div className="clay grid size-28 place-items-center bg-white"><StepArt step={item.n} className="h-20 w-auto" /></div><span className="mt-4 grid size-8 place-items-center rounded-full bg-navy-700 text-sm font-bold text-white">{item.n}</span><h3 className="mt-2 text-lg font-bold text-navy-900">{item.title}</h3><p className="mt-1 max-w-[16rem] text-slate-600">{item.body}</p></motion.li>)}</motion.ol></section>
+    <section className="bg-[#1F2D50] py-14 text-white"><div className="mx-auto grid max-w-7xl items-center gap-8 px-4 lg:grid-cols-[1.35fr_0.65fr]"><div><p className="text-sm font-bold uppercase tracking-[0.14em] text-saffron-300">Civic Pulse</p><h2 className="mt-2 text-3xl font-extrabold sm:text-4xl">{t("homeAccountabilityTitle")}</h2><p className="mt-4 max-w-2xl text-lg leading-relaxed text-navy-100">{t("homeAccountabilityBody")}</p><div className="mt-6 flex flex-wrap gap-3"><Link to="/board"><Button variant="saffron">{t("homeViewBoard")}<Map className="size-4" /></Button></Link><Link to="/agent"><Button variant="secondary">{t("watchAgent")}<Bot className="size-4" /></Button></Link></div></div><Card variant="dark" className="flex items-center justify-center border border-white/10 p-6"><ReceiptArt className="h-52 w-auto" title={t("homeTrustReceipts")} /></Card></div></section>
+    <section className="mx-auto max-w-7xl px-4 py-16"><SectionTitle kicker="Civic Pulse" title={t("liveTitle")} /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ v: stats.total, label: t("homeTasksStarted"), dec: 0, suf: "" }, { v: stats.completed, label: t("homeCompleted"), dec: 0, suf: "" }, { v: stats.filings, label: t("homeFiled"), dec: 0, suf: "" }, { v: stats.median, label: t("homeMedian"), dec: 1, suf: "s" }].map((item) => <Card key={item.label} variant="glass" className="p-6"><div className="font-display text-4xl font-extrabold text-navy-900"><CountUp value={item.v} decimals={item.dec} suffix={item.suf} /></div><div className="mt-1 text-sm font-medium text-slate-600">{item.label}</div></Card>)}</div><Link to="/agent" className="mt-6 inline-flex items-center gap-1.5 font-bold text-navy-700 hover:text-saffron-700">{t("homeOpenAgent")}<ArrowRight className="size-4" /></Link></section>
+    <section className="mx-auto max-w-7xl px-4 pb-6"><div className="clay overflow-hidden bg-navy-800 p-8 text-white sm:p-10"><h2 className="text-3xl font-extrabold">{t("trustTitle")}</h2><div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{[{ icon: ShieldCheck, title: "homeTrustConsent", body: "homeTrustConsentBody" }, { icon: KeyRound, title: "homeTrustPrivate", body: "homeTrustPrivateBody" }, { icon: Hand, title: "homeTrustKeys", body: "homeTrustKeysBody" }, { icon: FileCheck2, title: "homeTrustProof", body: "homeTrustProofBody" }].map((item) => <div key={item.title} className="rounded-2xl bg-white/5 p-5 ring-1 ring-white/10"><item.icon className="size-6 text-saffron-400" aria-hidden /><h3 className="mt-3 font-bold">{t(item.title as StringKey)}</h3><p className="mt-1 text-sm text-navy-100">{t(item.body as StringKey)}</p></div>)}</div></div></section>
+  </>;
 }

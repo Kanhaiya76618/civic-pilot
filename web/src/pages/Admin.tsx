@@ -2,9 +2,12 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldAlert, CheckCircle, Clock, ArrowRight, UserCheck, Filter,
   Building2, AlertTriangle, FileCheck, Upload, Send, ExternalLink,
-  ChevronDown, RefreshCw, XCircle, MapPin, Eye, ThumbsUp
+  ChevronDown, RefreshCw, XCircle, MapPin, Eye, ThumbsUp, Bot, ClipboardCopy,
+  FileSearch, ListChecks, Route
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { getAuthSession } from "../auth";
 import { Badge, Button, Card, fadeUp, stagger, useToast } from "../components/ui";
 
 type AdminReport = {
@@ -57,32 +60,8 @@ export default function AdminDesk() {
 
   // AutoFile State
   const [autofilingId, setAutofilingId] = useState<string | null>(null);
-
-  // Quick Admin Login
-  const loginAsAdmin = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/v1/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "admin@demo.in" })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setToken(data.access_token);
-        setIsAdmin(true);
-        setAdminUser(data.user);
-        toast("success", "Signed in as Municipal Desk Admin (Priya Nair)");
-        fetchQueue(data.access_token);
-      } else {
-        toast("error", "Admin authentication failed");
-      }
-    } catch {
-      toast("error", "Network error signing in");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [copilot, setCopilot] = useState<"priority" | "field" | "escalation">("priority");
+  const [copied, setCopied] = useState(false);
 
   const fetchQueue = async (authToken?: string) => {
     const t = authToken || token;
@@ -106,8 +85,15 @@ export default function AdminDesk() {
   };
 
   useEffect(() => {
-    // Attempt automatic login with demo admin account
-    loginAsAdmin();
+    const session = getAuthSession();
+    if (!session || session.user.role !== "admin") {
+      setLoading(false);
+      setIsAdmin(false);
+      return;
+    }
+    setToken(session.token);
+    setAdminUser(session.user);
+    fetchQueue(session.token);
   }, []);
 
   // Filtered reports
@@ -128,7 +114,7 @@ export default function AdminDesk() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        toast("success", "Ticket Acknowledged");
+        toast("ok", "Ticket Acknowledged");
         fetchQueue();
       }
     } catch {
@@ -146,7 +132,7 @@ export default function AdminDesk() {
         body: fd
       });
       if (res.ok) {
-        toast("success", `Assigned to ${assignedTo}`);
+        toast("ok", `Assigned to ${assignedTo}`);
         fetchQueue();
       }
     } catch {
@@ -164,7 +150,7 @@ export default function AdminDesk() {
         body: fd
       });
       if (res.ok) {
-        toast("success", `Severity updated to ${newSev}`);
+        toast("ok", `Severity updated to ${newSev}`);
         fetchQueue();
       }
     } catch {
@@ -189,7 +175,7 @@ export default function AdminDesk() {
         body: fd
       });
       if (res.ok) {
-        toast("success", "Ticket resolved with verified proof photo!");
+        toast("ok", "Ticket resolved with verified proof photo!");
         setResolveTarget(null);
         setResolvePhoto(null);
         setResolveNotes("");
@@ -214,7 +200,7 @@ export default function AdminDesk() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast("success", `Escalated to CPGRAMS! Ref: ${data.confirmation_number}`);
+        toast("ok", `Escalated to CPGRAMS! Ref: ${data.confirmation_number}`);
         fetchQueue();
       } else {
         toast("error", data.detail || "AutoFile escalation failed");
@@ -230,6 +216,31 @@ export default function AdminDesk() {
   const p1Count = reports.filter((r) => r.severity === "P1" && r.status !== "RESOLVED").length;
   const breachedCount = reports.filter((r) => r.sla_breached).length;
   const resolvedCount = reports.filter((r) => r.status === "RESOLVED").length;
+  const selectedReport = filtered[0] ?? reports[0] ?? null;
+  const fieldBrief = selectedReport
+    ? `FIELD BRIEF\nTicket: ${selectedReport.id.slice(0, 8)}\nPriority: ${selectedReport.severity}\nLocation: ${selectedReport.ward_name}, ${selectedReport.city} (${selectedReport.latitude.toFixed(5)}, ${selectedReport.longitude.toFixed(5)})\nIssue: ${selectedReport.description}\nEvidence: ${selectedReport.evidence_urls.length ? `${selectedReport.evidence_urls.length} attachment(s) available` : "No attachment available"}\nOfficer decision needed: confirm the site action and assign a named division.`
+    : "No queue item is available yet. Refresh the queue to build a field brief.";
+  const escalationDraft = selectedReport
+    ? `ESCALATION DRAFT — REVIEW BEFORE SENDING\nTicket: ${selectedReport.id.slice(0, 8)}\n${selectedReport.description}\nLocation: ${selectedReport.ward_name}, ${selectedReport.city}\nPriority: ${selectedReport.severity}${selectedReport.sla_breached ? " · SLA breached" : ""}\nThis draft is based on the municipal queue and has not been sent to any external portal.`
+    : "No queue item is available yet. Refresh the queue to prepare an escalation draft.";
+  const copilotText = copilot === "priority"
+    ? `${p1Count} open P1 ticket${p1Count === 1 ? "" : "s"} and ${breachedCount} SLA-breached ticket${breachedCount === 1 ? "" : "s"} need officer attention. The agent explains the queue signals; it does not change priority or assign work.`
+    : copilot === "field" ? fieldBrief : escalationDraft;
+  const copyCopilot = async () => {
+    try { await navigator.clipboard.writeText(copilotText); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+    catch { toast("error", "Could not copy the draft. Please select the text manually."); }
+  };
+
+  if (!isAdmin && !loading) return (
+    <div className="mx-auto grid max-w-xl place-items-center px-4 py-20 text-center">
+      <div className="rounded-3xl bg-white p-8 shadow-lg ring-1 ring-navy-100">
+        <Building2 className="mx-auto size-9 text-navy-700" />
+        <h1 className="mt-4 text-2xl font-extrabold text-navy-900">Municipal desk access required</h1>
+        <p className="mt-3 text-slate-600">This workspace is for authorised municipal officers. Citizen accounts cannot view or act on this queue.</p>
+        <Link to="/signin?role=admin" className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-navy-700 px-5 font-semibold text-white hover:bg-navy-800">Municipal sign in</Link>
+      </div>
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -256,16 +267,23 @@ export default function AdminDesk() {
                 <span className="ml-1 text-emerald-700">(Verified Desk Officer)</span>
               </div>
             </div>
-          ) : (
-            <Button onClick={loginAsAdmin} variant="primary">
-              Sign In as Municipal Admin
-            </Button>
-          )}
+          ) : null}
           <Button onClick={() => fetchQueue()} variant="secondary" aria-label="Refresh queue">
             <RefreshCw className="size-4" />
           </Button>
         </div>
       </div>
+
+      <section className="mt-6 grid gap-4 xl:grid-cols-[1.2fr_.95fr_.7fr]" aria-labelledby="desk-agents-title">
+        <div className="overflow-hidden rounded-3xl bg-navy-800 p-5 text-white shadow-[0_18px_36px_-24px_rgb(19_48_107/.65)] sm:p-6">
+          <div className="flex items-start justify-between gap-3"><div><div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-saffron-200"><Bot className="size-3.5" />Supervised desk agents</div><h2 id="desk-agents-title" className="mt-3 text-2xl font-extrabold">Prepare the next best action—never take it for you.</h2></div><span className="mt-1 size-2 animate-pulse rounded-full bg-leaf-400" aria-label="Desk agents ready" /></div>
+          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+            {[{ id: "priority" as const, icon: ListChecks, title: "Priority brief", body: "Explain urgency signals" }, { id: "field" as const, icon: Route, title: "Field handoff", body: "Prepare a site brief" }, { id: "escalation" as const, icon: FileSearch, title: "Escalation draft", body: "Draft, never send" }].map((agent) => <button key={agent.id} type="button" onClick={() => { setCopilot(agent.id); setCopied(false); }} aria-pressed={copilot === agent.id} className={`rounded-2xl p-3 text-left transition ${copilot === agent.id ? "bg-white text-navy-900 shadow-sm" : "bg-white/8 text-white hover:bg-white/14"}`}><agent.icon className={`size-4 ${copilot === agent.id ? "text-saffron-700" : "text-saffron-300"}`} /><div className="mt-2 text-sm font-bold">{agent.title}</div><div className={`mt-0.5 text-xs ${copilot === agent.id ? "text-slate-600" : "text-navy-100"}`}>{agent.body}</div></button>)}
+          </div>
+        </div>
+        <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-navy-100 sm:p-6"><div className="flex items-center justify-between gap-3"><div className="text-xs font-bold uppercase tracking-[.12em] text-navy-600">Officer review area</div><button type="button" onClick={copyCopilot} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-navy-50 px-3 text-xs font-bold text-navy-700 transition hover:bg-navy-100"><ClipboardCopy className="size-3.5" />{copied ? "Copied" : "Copy draft"}</button></div><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">{copilotText}</pre><p className="mt-3 text-xs font-medium text-saffron-700">No status, assignment, closure or external filing changes until an officer uses the queue controls below.</p></div>
+        <figure className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-navy-100"><img src="/images/commons-mcd-hq.webp" loading="lazy" decoding="async" alt="Delhi municipal civic centre building" className="h-40 w-full object-cover xl:h-full" /><figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-xs"><span className="font-semibold text-navy-800">Desk context</span><a href="https://commons.wikimedia.org/wiki/File:MCD_HQ.jpg" target="_blank" rel="noreferrer" className="text-slate-500 hover:underline">Nikhil B / Commons</a></figcaption></figure>
+      </section>
 
       {/* Metrics Row */}
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">

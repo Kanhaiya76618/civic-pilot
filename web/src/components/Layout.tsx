@@ -1,17 +1,16 @@
 import { AnimatePresence, motion } from "motion/react";
 import { AArrowDown, AArrowUp, Languages, Menu, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { authChangeEvent, clearAuthSession, getAuthSession, type AuthSession } from "../auth";
 import { useI18n, type StringKey } from "../i18n";
 import { Logo, TricolorStrip } from "./ui";
 
-const NAV: { to: string; key: StringKey }[] = [
+const PUBLIC_NAV: { to: string; key: StringKey }[] = [
   { to: "/", key: "navHome" },
   { to: "/schemes", key: "navSchemes" },
   { to: "/grievance", key: "navGrievance" },
   { to: "/board", key: "navBoard" },
-  { to: "/admin", key: "navAdmin" },
-  { to: "/agent", key: "navAgent" },
 ];
 
 function UtilityBar({ dark }: { dark?: boolean }) {
@@ -44,13 +43,28 @@ function UtilityBar({ dark }: { dark?: boolean }) {
 function Header({ dark }: { dark?: boolean }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [session, setSession] = useState<AuthSession | null>(() => getAuthSession());
   const loc = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const sync = () => setSession(getAuthSession());
+    window.addEventListener(authChangeEvent, sync);
+    window.addEventListener("storage", sync);
+    return () => { window.removeEventListener(authChangeEvent, sync); window.removeEventListener("storage", sync); };
+  }, []);
   useEffect(() => { setOpen(false); }, [loc.pathname]);
+  const nav = useMemo(() => {
+    if (!session) return PUBLIC_NAV;
+    if (session.user.role === "admin") return [{ to: "/admin", key: "navAdmin" as StringKey }, { to: "/board", key: "navBoard" as StringKey }];
+    return [{ to: "/home", key: "navHome" as StringKey }, ...PUBLIC_NAV.slice(1), { to: "/agent", key: "navAgent" as StringKey }];
+  }, [session]);
   const active = (to: string) => (to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(to) || (to === "/agent" && loc.pathname.startsWith("/citizen")));
+  const home = session?.user.role === "citizen" ? "/home" : session?.user.role === "admin" ? "/admin" : "/";
+  function signOut() { clearAuthSession(); navigate("/"); }
   return (
     <header className={`sticky top-0 z-40 ${dark ? "border-b border-white/5 bg-night-900/80 backdrop-blur" : "glass border-x-0 border-t-0"}`}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5">
-        <Link to="/" className="flex items-center gap-3" aria-label="Civic Pulse home">
+        <Link to={home} className="flex items-center gap-3" aria-label="Civic Pulse home">
           <Logo size={dark ? 36 : 46} />
           <div className="leading-tight">
             <div className={`font-display text-xl font-extrabold ${dark ? "text-white" : "text-navy-900"}`}>Civic Pulse <span className={`font-semibold ${dark ? "text-slate-400" : "text-saffron-700"}`}>· सिविक पल्स</span></div>
@@ -58,24 +72,26 @@ function Header({ dark }: { dark?: boolean }) {
           </div>
         </Link>
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <NavLink key={n.to} to={n.to} className={`relative rounded-lg px-3 py-2 text-sm font-semibold ${dark ? "text-slate-300 hover:text-white" : "text-navy-800 hover:bg-navy-50"}`}>
               {t(n.key)}
               {active(n.to) && <motion.span layoutId="nav-underline" className="absolute inset-x-2 -bottom-0.5 h-1 rounded-full tricolor-bar" />}
             </NavLink>
           ))}
         </nav>
-        <button className={`rounded-lg p-2 lg:hidden ${dark ? "text-white" : "text-navy-800"}`} aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? <X /> : <Menu />}
-        </button>
+        <div className="flex items-center gap-2">
+          {session ? <><span className={`hidden max-w-32 truncate text-xs font-semibold xl:inline ${dark ? "text-slate-300" : "text-navy-700"}`}>{session.user.name}</span><button onClick={signOut} className={`hidden min-h-9 rounded-lg px-3 text-sm font-semibold lg:inline-flex ${dark ? "text-white hover:bg-white/10" : "text-navy-700 hover:bg-navy-50"}`}>Sign out</button></> : <Link to="/signin" className={`hidden min-h-9 items-center rounded-lg px-3 text-sm font-bold lg:inline-flex ${dark ? "bg-white text-navy-900 hover:bg-navy-50" : "bg-navy-700 text-white hover:bg-navy-800"}`}>Sign in</Link>}
+          <button className={`rounded-lg p-2 lg:hidden ${dark ? "text-white" : "text-navy-800"}`} aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+        </div>
       </div>
       <AnimatePresence>
         {open && (
           <motion.nav initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden lg:hidden" aria-label="Main mobile">
             <div className="flex flex-col gap-1 px-4 pb-3">
-              {NAV.map((n) => (
+              {nav.map((n) => (
                 <NavLink key={n.to} to={n.to} className={`rounded-xl px-3 py-3 font-semibold ${active(n.to) ? (dark ? "bg-white/10 text-white" : "bg-navy-50 text-navy-900") : dark ? "text-slate-300" : "text-navy-800"}`}>{t(n.key)}</NavLink>
               ))}
+              {session ? <button onClick={signOut} className={`rounded-xl px-3 py-3 text-left font-semibold ${dark ? "text-slate-300 hover:bg-white/10" : "text-navy-800 hover:bg-navy-50"}`}>Sign out</button> : <Link to="/signin" className={`rounded-xl px-3 py-3 font-semibold ${dark ? "text-white hover:bg-white/10" : "text-navy-800 hover:bg-navy-50"}`}>Sign in</Link>}
             </div>
           </motion.nav>
         )}
