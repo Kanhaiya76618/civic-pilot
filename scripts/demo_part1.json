@@ -1,0 +1,12 @@
+{
+  "_note": "Documents, questions and languages to prepare before a demo. On the page, type the question exactly as written here (or leave it empty for the empty-question entries) and pick the same language, so the prepared answer is used.",
+  "items": [
+    {"url": "https://www.myscheme.gov.in/schemes/igndps", "language": "hi-IN", "question": ""},
+    {"url": "https://www.myscheme.gov.in/schemes/igndps", "language": "ta-IN", "question": ""},
+    {"url": "https://jansuraksha.gov.in/Files/PMSBY/English/Rules.pdf", "language": "hi-IN",
+     "question": "I am 52 and run a small kirana shop with a savings account. Can I join and what will my family get?"},
+    {"url": "https://jansuraksha.gov.in/Files/PMJJBY/Hindi/Rules.pdf", "language": "en-IN", "question": ""},
+    {"url": "https://socialjustice.gov.in/writereaddata/UploadFile/57051789558555.pdf", "language": "hi-IN",
+     "question": "I run a small shop with 12 employees. What must I do as an employer under this law, and what rights does a woman who complains have?"}
+  ]
+}

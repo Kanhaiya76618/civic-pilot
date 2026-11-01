@@ -258,3 +258,20 @@ async def test_voice_question_needs_a_key_and_short_audio(svc, monkeypatch, tmp_
         assert big.status_code == 413
         wrong = await c.post("/app/part1/api/transcribe", files={"audio": ("q", b"0" * 2000, "text/plain")})
         assert wrong.status_code == 415
+
+
+async def test_same_document_same_id_and_answers_survive_restart(svc):
+    a = svc._save("x", "pasted_text", None, [NOTICE])
+    b = svc._save("x", "pasted_text", None, [NOTICE])
+    assert a["doc_id"] == b["doc_id"]
+    await svc.explain(a["doc_id"], "q?", "hi-IN")
+    fresh = E.Explainer(svc.ex)  # as after a server restart
+    again = await fresh.explain(a["doc_id"], "q?", "hi-IN")
+    assert again["cached"] is True and len(svc.ex.llm.calls) == 2
+    page = svc._save("x", "web_page", "https://example.gov.in/n", [NOTICE])
+    await svc.explain(page["doc_id"], "q?", "hi-IN")
+    assert svc.cached((page["doc_id"], "q?", "hi-IN"))
+    svc._save("x", "web_page", "https://example.gov.in/n", [NOTICE])  # same content: answers kept
+    assert svc.cached((page["doc_id"], "q?", "hi-IN"))
+    svc._save("x", "web_page", "https://example.gov.in/n", [NOTICE + " Amended."])  # the page changed
+    assert svc.cached((page["doc_id"], "q?", "hi-IN")) is None

@@ -93,6 +93,8 @@ flowchart TD
 - **Voice questions on any phone:** the page records the question (MediaRecorder: Android, iPhone, desktop) and the server transcribes it with Whisper (large) through AIML API, detecting the language when none is chosen. Audio is not stored; recordings are capped at 30 s and count against the cost limit. Measured: a 5-second Hindi question transcribed correctly in 8 s; long recordings (about a minute) can exceed the 45-second wait, so the page keeps questions short.
 - **Links to the agent:** when the document matches a service the agent runs, the page offers it (e.g. the live myScheme finder).
 - **Cost guard:** model-backed runs are capped per visitor and overall per hour (`CIVIC_EXPLAINS_PER_HOUR`, `CIVIC_EXPLAINS_GLOBAL_PER_HOUR`); cached answers are free.
+- **Long documents:** measured on the government's 58-page POSH Act handbook (74,000 characters): keyword ranking sent 39 of 63 chunks, and the answer for a 12-employee shop cited pages 20 to 53 correctly, in 71 s.
+- **Demo warm-up:** `scripts/warmup_part1.py` prepares the demo documents; the same document always gets the same id and answers are saved on disk, so they survive restarts (cleared when a document changes). See the Part 1 demo checklist in `docs/YOUR_TASKS.md`.
 - **Not yet:** pages beyond the 12th of a scanned PDF; long documents use keyword ranking, not embeddings.
 
 ---

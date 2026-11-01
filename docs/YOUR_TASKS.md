@@ -55,3 +55,25 @@ keys, a deployment, team decisions, rehearsal.
   curl -X POST $URL/v1/admin/sandbox-variant -H "X-API-Key: $KEY" -H "Content-Type: application/json" -d '{"variant":"inject"}'
   ```
   Set it back to `{"variant":"default"}` afterwards.
+
+## Part 1 demo checklist (explainer)
+
+**The day before**
+- Listen to `voice-check/index.html` (Tamil, Bengali, Marathi, Telugu). Note any language that sounds wrong.
+- Edit `scripts/demo_part1.json`: the documents, languages and exact questions you will show.
+
+**30 minutes before** (after the server's final restart is fine: prepared answers are saved on disk)
+```bash
+uv run python scripts/warmup_part1.py https://<your-deployed-url>
+```
+Every line must say `ready` and `audio=yes`. Run it twice: the second run must say `(already prepared)` for every line.
+
+**During the demo**
+1. Open **Know your schemes**. Click the language button first, then paste the link (or a "Try" sample) and type the
+   question exactly as in `demo_part1.json`: the prepared answer appears at once.
+2. Say it plainly: "this one was prepared earlier from the live document."
+3. Then do one live run on a document the audience picks (about 40–90 s; the engine room shows each stage).
+4. Show a quote ("From the document, page N") and the voice. Show the 58-page POSH handbook if asked about long documents.
+5. If the AI service is down: the page says so honestly; prepared answers still work.
+
+**Never** present a prepared answer as if it were made live.

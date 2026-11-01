@@ -11,3 +11,4 @@ registry/*/patches/
 registry/*/drafts/
 web/node_modules/
 web/dist/
+voice-check/

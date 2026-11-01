@@ -15,6 +15,7 @@ text-to-speech key the page uses the device's own voice and says so.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import io
 import json
@@ -284,20 +285,42 @@ class Explainer:
         (self.dir / "audio").mkdir(parents=True, exist_ok=True)
         self.latest = Pipeline("")
         self._reasoned: dict[tuple, dict] = {}
-        self._explained: dict[tuple, dict] = {}
+        (self.dir / "answers").mkdir(parents=True, exist_ok=True)
 
     # documents -------------------------------------------------------------
-    def _save(self, title: str, source: str, url: str | None, pages: list[str], ocr: dict | None = None) -> dict:
+    # The same document always gets the same id (from its link, or its bytes/text), so adding it again is instant and
+    # answers prepared earlier (the demo warm-up) are found again.
+    @staticmethod
+    def doc_id_for(key: str) -> str:
+        return "doc_" + hashlib.sha256(key.encode()).hexdigest()[:12]
+
+    def _existing(self, key: str, max_age_s: float | None = None) -> dict | None:
+        path = self.dir / "docs" / f"{self.doc_id_for(key)}.json"
+        if not path.exists() or (max_age_s and time.time() - path.stat().st_mtime > max_age_s):
+            return None
+        doc = json.loads(path.read_text())
+        return {k: v for k, v in doc.items() if k != "pages"} | {"page_count": len(doc["pages"]), "reused": True}
+
+    def _save(self, title: str, source: str, url: str | None, pages: list[str], ocr: dict | None = None, key: str | None = None) -> dict:
         text = "\n".join(pages).strip()
         if len(text) < 200:
             raise HTTPException(422, "Too little readable text to explain.")
-        doc = {"doc_id": "doc_" + uuid.uuid4().hex[:12], "title": title[:200] or "Untitled document", "source": source, "url": url,
+        key = key or (f"url:{url}" if url else "text:" + hashlib.sha256(text.encode()).hexdigest())
+        doc_id = self.doc_id_for(key)
+        old = self.dir / "docs" / f"{doc_id}.json"
+        if old.exists() and json.loads(old.read_text()).get("pages") != pages:
+            import shutil  # the document changed since it was last read: its saved answers no longer apply
+            shutil.rmtree(self.dir / "answers" / doc_id, ignore_errors=True)
+        doc = {"doc_id": doc_id, "title": title[:200] or "Untitled document", "source": source, "url": url,
                "pages": pages, "chars": len(text), "created_at": datetime.now(timezone.utc).isoformat(), "ocr": ocr}
         (self.dir / "docs" / f"{doc['doc_id']}.json").write_text(json.dumps(doc, ensure_ascii=False))
         return {k: v for k, v in doc.items() if k != "pages"} | {"page_count": len(pages)}
 
     async def pdf_doc(self, data: bytes, title: str, source: str, url: str | None, charge: Callable[[], None] | None = None) -> dict:
         """A text PDF is read directly; a scanned one is transcribed by the model from page images."""
+        key = f"url:{url}" if url else "pdf:" + hashlib.sha256(data).hexdigest()
+        if not url and (seen := self._existing(key)):
+            return seen  # the same upload again: no second read, no second charge
         try:
             pages = pdf_pages(data)
         except Exception:
@@ -305,7 +328,7 @@ class Explainer:
         text = "".join(pages).strip()
         reason = "scanned" if len(text) < 200 else "indian_script" if indic_share(text) > 0.3 else None
         if not reason:
-            return self._save(title, source, url, pages)
+            return self._save(title, source, url, pages, key=key)
         if not self.ex.llm:
             raise HTTPException(503, "This PDF has to be read from its page images, which needs an AI model (set AIMLAPI_KEY).")
         if charge:
@@ -322,7 +345,7 @@ class Explainer:
                 if start + 1 <= p.get("page", 0) <= start + len(batch):
                     texts[p["page"]] = p.get("text", "")
         pages = [texts.get(i + 1, "") for i in range(len(images))]
-        return self._save(title, source + "_scan", url, pages, ocr={"pages_read": len(images), "pages_total": total, "reason": reason})
+        return self._save(title, source + "_scan", url, pages, ocr={"pages_read": len(images), "pages_total": total, "reason": reason}, key=key)
 
     def load(self, doc_id: str) -> dict:
         if not re.fullmatch(r"doc_[0-9a-f]{12}", doc_id or ""):
@@ -333,7 +356,9 @@ class Explainer:
         return json.loads(path.read_text())
 
     async def from_url(self, url: str, charge: Callable[[], None] | None = None) -> dict:
-        """charge: called before reading a scan, which costs model calls."""
+        """charge: called before reading a scan, which costs model calls. A link read in the last day is reused."""
+        if seen := self._existing(f"url:{url}", max_age_s=86400):
+            return seen
         headers = {"User-Agent": "CivicPulse/0.1 (citizen explainer; official documents only)"}
         for _ in range(6):  # follow redirects ourselves, checking every hop stays on government hosts
             host = urlparse(url).hostname or ""
@@ -401,14 +426,15 @@ class Explainer:
         auto_language = auto_language and bool(question.strip())
         question = question.strip() or DEFAULT_QUESTION
         key = (doc_id, question, language)
-        if key in self._explained and not auto_language:
-            return {**self._explained[key], "cached": True}
+        if not auto_language and (hit := self.cached(key)):
+            return hit
         p = self.latest = Pipeline(question)
         started, calls = time.monotonic(), 0
         p.start("ingest"); p.done("ingest", note=doc["source"])
         p.start("parse"); p.done("parse", note=f"{len(doc['pages'])} page(s), {doc['chars']} characters")
         p.start("chunk"); parts = chunks(doc["pages"]); p.done("chunk", note=f"{len(parts)} chunks")
-        p.done("embed", status="idle", note="not used: keyword retrieval, the document fits the model's context")
+        long_doc = doc["chars"] > WHOLE_DOC_CHARS
+        p.done("embed", status="idle", note="not used: keyword ranking picks the parts that matter" if long_doc else "not needed: the whole document fits")
         p.start("retrieve"); picked = retrieve(parts, question); p.done("retrieve", note=f"{len(picked)} of {len(parts)} chunks")
 
         rkey = (doc_id, question)
@@ -439,8 +465,8 @@ class Explainer:
         detected = data.get("question_language")
         if auto_language and detected in LANGUAGES and detected != language:
             language = detected
-            if (doc_id, question, language) in self._explained:
-                return {**self._explained[(doc_id, question, language)], "cached": True}
+            if hit := self.cached((doc_id, question, language)):
+                return hit
         key = (doc_id, question, language)
 
         p.start("translate")
@@ -457,8 +483,20 @@ class Explainer:
         result["language_from_question"] = bool(auto_language and detected == language)
         result["timing"] = {"ms": int((time.monotonic() - started) * 1000), "ai_calls": calls}
         result["question"] = question
-        self._explained[key] = result
+        path = self._answer_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result, ensure_ascii=False))
         return result
+
+    # Answers are kept on disk, so they survive a restart (and the demo warm-up holds).
+    def _answer_path(self, key: tuple):
+        """answers/<doc_id>/<hash of question and language>.json"""
+        name = hashlib.sha256(json.dumps(key[1:], ensure_ascii=False).encode()).hexdigest()[:24] + ".json"
+        return self.dir / "answers" / key[0] / name
+
+    def cached(self, key: tuple) -> dict | None:
+        path = self._answer_path(key)
+        return {**json.loads(path.read_text()), "cached": True} if path.exists() else None
 
     def _verify(self, data: dict, doc: dict) -> dict:
         """Keep an item only if its quote is in the document; record the page it is on."""
@@ -657,7 +695,7 @@ def make_explainer_router(ex: Callable[[], "Executor"]) -> APIRouter:
         if not body.doc_id:
             raise HTTPException(400, "Add the notification first (a link, a PDF or the text): explanations come only from the document.")
         s = svc()
-        if body.auto_language or (body.doc_id, body.question.strip() or DEFAULT_QUESTION, body.language) not in s._explained:
+        if body.auto_language or not s.cached((body.doc_id, body.question.strip() or DEFAULT_QUESTION, body.language)):
             limiter(request)()  # cached answers are free
         return await s.explain(body.doc_id, body.question, body.language, body.auto_language)
 
