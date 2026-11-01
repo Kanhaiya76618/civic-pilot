@@ -80,7 +80,6 @@ export default function Board() {
     <div className="mx-auto max-w-7xl px-4 py-10">
       <motion.div initial="hidden" animate="show" variants={stagger} className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <motion.div variants={fadeUp}><Badge tone="saffron">Part 2 · Public accountability</Badge></motion.div>
           <motion.h1 variants={fadeUp} className="mt-3 text-4xl font-extrabold text-navy-900 sm:text-5xl">Accountability board</motion.h1>
           <motion.p variants={fadeUp} className="mt-3 max-w-2xl text-lg text-slate-700">Every reported problem, where it is, and who is working on it. Open to everyone, no login.</motion.p>
         </div>
