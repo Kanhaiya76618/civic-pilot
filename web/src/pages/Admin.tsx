@@ -3,7 +3,7 @@ import {
   ShieldAlert, CheckCircle, Clock, ArrowRight, UserCheck, Filter,
   Building2, AlertTriangle, FileCheck, Upload, Send, ExternalLink,
   ChevronDown, RefreshCw, XCircle, MapPin, Eye, ThumbsUp, Bot, ClipboardCopy,
-  FileSearch, ListChecks, Route
+  FileSearch, ListChecks, Route, Languages, ThumbsDown
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -29,6 +29,11 @@ type AdminReport = {
   duplicate_of: string | null;
   evidence_urls: string[];
   resolution_proof_url: string | null;
+  resolution_notes: string | null;
+  translation: { language: string; language_name: string; english: string; transcript: string | null; spoken_language: string | null } | null;
+  needs_translation: boolean;
+  citizen_verdict: "confirmed" | "disputed" | null;
+  last_dispute: string | null;
   created_at: string;
 };
 
@@ -57,6 +62,8 @@ export default function AdminDesk() {
   const [resolvePhoto, setResolvePhoto] = useState<File | null>(null);
   const [resolveNotes, setResolveNotes] = useState("");
   const [resolving, setResolving] = useState(false);
+
+  const [translatingId, setTranslatingId] = useState<string | null>(null);
 
   // AutoFile State
   const [autofilingId, setAutofilingId] = useState<string | null>(null);
@@ -175,7 +182,8 @@ export default function AdminDesk() {
         body: fd
       });
       if (res.ok) {
-        toast("ok", "Ticket resolved with verified proof photo!");
+        const done = await res.json();
+        toast("ok", done.faces_blurred ? `Resolved. ${done.faces_blurred} face${done.faces_blurred === 1 ? "" : "s"} blurred in the public proof photo.` : "Resolved with a proof photo.");
         setResolveTarget(null);
         setResolvePhoto(null);
         setResolveNotes("");
@@ -188,6 +196,20 @@ export default function AdminDesk() {
       toast("error", "Failed to submit resolution");
     } finally {
       setResolving(false);
+    }
+  };
+
+  const handleTranslate = async (id: string) => {
+    try {
+      setTranslatingId(id);
+      const res = await fetch(`/api/v1/admin/reports/${id}/translate`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (!res.ok) toast("error", data.detail || "Translation failed");
+      else { toast("ok", data.translation ? `Translated from ${data.translation.language_name}` : data.message); fetchQueue(); }
+    } catch {
+      toast("error", "Translation failed");
+    } finally {
+      setTranslatingId(null);
     }
   };
 
@@ -402,6 +424,21 @@ export default function AdminDesk() {
                       Deduplicated (Merged)
                     </span>
                   )}
+                  {r.citizen_verdict === "confirmed" && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+                      <CheckCircle className="size-3" /> Citizen confirmed the fix
+                    </span>
+                  )}
+                  {r.last_dispute && r.status !== "RESOLVED" && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">
+                      <ThumbsDown className="size-3" /> Reopened by the citizen
+                    </span>
+                  )}
+                  {r.translation && r.translation.language !== "en-IN" && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
+                      <Languages className="size-3" /> {r.translation.language_name}
+                    </span>
+                  )}
                   {r.upvotes > 1 && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 text-blue-700 px-2 py-0.5 text-xs font-bold">
                       <ThumbsUp className="size-3" /> {r.upvotes}
@@ -409,8 +446,18 @@ export default function AdminDesk() {
                   )}
                 </div>
 
-                {/* Description */}
-                <h3 className="mt-2.5 text-base font-bold text-navy-900">{r.description}</h3>
+                {/* Description: the citizen's own words, then the machine translation beside them */}
+                <h3 className="mt-2.5 whitespace-pre-line break-words text-base font-bold text-navy-900">{r.description}</h3>
+                {r.translation && r.translation.language !== "en-IN" && (
+                  <div className="mt-2 rounded-xl bg-violet-50 p-3 text-sm text-violet-950 ring-1 ring-violet-100">
+                    <div className="text-xs font-bold uppercase tracking-wider text-violet-700">English (machine translation from {r.translation.language_name})</div>
+                    <p className="mt-1 whitespace-pre-line break-words">{r.translation.english}</p>
+                    {r.translation.transcript && <p className="mt-2 text-xs text-violet-800"><b>Voice note said:</b> {r.translation.transcript}</p>}
+                  </div>
+                )}
+                {r.last_dispute && r.status !== "RESOLVED" && (
+                  <p className="mt-2 rounded-xl bg-red-50 p-2.5 text-sm text-red-900 ring-1 ring-red-100"><b>Citizen says it is not fixed:</b> {r.last_dispute}</p>
+                )}
 
                 {/* Metadata & POI proximity */}
                 <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-500">
@@ -439,7 +486,7 @@ export default function AdminDesk() {
                 {r.resolution_proof_url && (
                   <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 p-2.5 text-xs text-emerald-900 border border-emerald-200">
                     <FileCheck className="size-4 text-emerald-700" />
-                    <span><strong>Proof Verified:</strong> Hot-mix bitumen patch completed.</span>
+                    <span><strong>Resolved with proof:</strong> {r.resolution_notes || "No notes were given."}</span>
                     <a
                       href={r.resolution_proof_url}
                       target="_blank"
@@ -502,6 +549,13 @@ export default function AdminDesk() {
                   </Button>
                 )}
 
+                {r.needs_translation && (
+                  <Button size="sm" variant="secondary" disabled={translatingId === r.id} onClick={() => handleTranslate(r.id)}>
+                    <Languages className="size-3.5 mr-1" />
+                    {translatingId === r.id ? "Translating..." : "Translate to English"}
+                  </Button>
+                )}
+
                 {/* AutoFile Escalation Agent */}
                 {(r.severity === "P1" || r.sla_breached) && (
                   <Button
@@ -559,7 +613,8 @@ export default function AdminDesk() {
                     Mandatory Resolution Proof Photo <span className="text-red-500">*</span>
                   </label>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Upload inspection photo proving repair completion. Prevents fraudulent closure.
+                    Upload inspection photo proving repair completion. Prevents fraudulent closure. It is public: detected
+                    faces are blurred and location metadata is removed before it is published.
                   </p>
                   <input
                     type="file"

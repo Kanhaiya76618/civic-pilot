@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, BadgeCheck, Camera, CircleAlert, Crosshair, LoaderCircle, MapPin, Mic, Route, Sparkles, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, Camera, CircleAlert, Crosshair, Languages, LoaderCircle, MapPin, Mic, Route, Sparkles, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api, type AppConfig, type Service } from "../api";
 import { CategoryArt, type Category } from "../components/Illustrations";
+import { MyReports } from "../components/MyReports";
 import { ServiceForm } from "../components/ServiceForm";
+import { LANGS } from "../languages";
 import { Badge, Button, Card, fadeUp, SectionTitle, stagger, useToast } from "../components/ui";
 
 const CATEGORIES: { id: Category; label: string; hi: string; tint: string }[] = [
@@ -18,7 +20,17 @@ const CATEGORIES: { id: Category; label: string; hi: string; tint: string }[] = 
 ];
 
 /** Part 2 contract: POST /api/reports (multipart) -> Triage (see docs/UI_CONTRACT.md). */
-type Triage = { code?: string; severity: "P1" | "P2" | "P3" | string; category?: string; reasoning?: string; duplicate_of?: string | null };
+type Triage = { code?: string; severity: "P1" | "P2" | "P3" | string; category?: string; reasoning?: string; duplicate_of?: string | null; translating?: boolean };
+const LANGUAGE_NAMES = LANGS.map((l) => l.label).join(" · ");
+
+/** Rough centre of a PIN code area (OpenStreetMap), for reports filed without "Use my location". */
+async function pinCentre(pin: string): Promise<[number, number] | null> {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&country=India&postalcode=${pin}&limit=1`, { headers: { "Accept-Language": "en" } });
+    const [hit] = await r.json();
+    return hit ? [Number(hit.lat), Number(hit.lon)] : null;
+  } catch { return null; }
+}
 
 const STEPS = ["Photo & voice", "Location", "Details", "Review & file"];
 const field = "mt-1.5 w-full min-h-11 rounded-xl border border-navy-100 bg-white px-3.5 py-2.5 text-base outline-none focus:border-navy-400 focus:ring-4 focus:ring-navy-100";
@@ -47,7 +59,7 @@ function VoiceNote({ value, onChange }: { value: Blob | null; onChange: (b: Blob
   };
   return (
     <div className="rounded-2xl bg-white p-4 ring-1 ring-navy-100">
-      <p className="text-sm font-semibold text-navy-900">Voice note <span className="font-normal text-slate-500">(optional, any language)</span></p>
+      <p className="text-sm font-semibold text-navy-900">Voice note <span className="font-normal text-slate-500">(optional, in any of 12 Indian languages)</span></p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         {rec ? (
           <Button variant="danger" onClick={() => rec.stop()}><Square className="size-4" />Stop · {seconds}s</Button>
@@ -112,14 +124,16 @@ export default function Grievance() {
   };
 
   async function runTriage() {
-    if (!config?.part2_connected || !category) return;
+    if (!config?.part2_connected || !category || triage) return; // one report per filing, even if the citizen steps back
     setTriageBusy(true);
     try {
+      const at = coords ?? await pinCentre(pin);
+      if (!at) throw new Error("Could not place this PIN code on the map. Please use \"Use my current location\".");
       const fd = new FormData();
       if (photo) fd.append("photo", photo);
-      if (voice) fd.append("audio", voice, "voice-note.webm");
-      fd.append("category", category); fd.append("description", description);
-      if (coords) { fd.append("lat", String(coords[0])); fd.append("lng", String(coords[1])); }
+      if (voice) fd.append("voice", voice, `voice-note.${voice.type.includes("ogg") ? "ogg" : voice.type.includes("mp4") ? "m4a" : "webm"}`);
+      fd.append("category", category); fd.append("description", `${subject.trim()}\n\n${description.trim()}`);
+      fd.append("latitude", String(at[0])); fd.append("longitude", String(at[1]));
       setTriage(await api.part2("api/reports", { method: "POST", body: fd }));
     } catch (e) { toast("error", (e as Error).message); }
     setTriageBusy(false);
@@ -141,6 +155,8 @@ export default function Grievance() {
         </motion.div>
         <Card variant="clay" className="overflow-hidden bg-white p-2"><img src="/images/civic-reporting-guide-3d.webp" alt="A citizen photographs a pothole while municipal workers repair the road" className="aspect-[4/3] w-full rounded-[1.35rem] object-cover" /></Card>
       </section>
+
+      <MyReports refreshKey={triage ? 1 : 0} />
 
       <section className="mx-auto max-w-7xl px-4 py-8" aria-labelledby="cat">
         <h2 id="cat" className="mb-5 text-2xl font-extrabold text-navy-900">What is the problem about?</h2>
@@ -230,7 +246,10 @@ export default function Grievance() {
                       <div>
                         <label htmlFor="g_desc" className="text-sm font-semibold text-navy-900">What is happening? <span className="text-red-600">*</span></label>
                         <textarea id="g_desc" className={`${field} min-h-32`} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Where exactly, since when, and who is affected." />
-                        <p className="mt-1 text-right text-xs text-slate-500">{description.length}/4000</p>
+                        <p className="mt-1 flex items-start justify-between gap-3 text-xs text-slate-500">
+                          <span className="flex items-start gap-1.5"><Languages className="mt-0.5 size-3.5 shrink-0" />Write in your own language: {LANGUAGE_NAMES}. The officer also gets an English translation; your words are kept as you wrote them.</span>
+                          <span className="shrink-0">{description.length}/4000</span>
+                        </p>
                       </div>
                       <div className="flex items-start gap-3 rounded-2xl bg-saffron-50 p-4 ring-1 ring-saffron-200">
                         <Route className="mt-0.5 size-5 shrink-0 text-saffron-700" />
@@ -250,6 +269,7 @@ export default function Grievance() {
                               <div className="flex flex-wrap items-center gap-2"><Badge tone={sev.tone}>Severity: {sev.label}</Badge>{triage.code && <Badge tone="gray">{triage.code}</Badge>}</div>
                               {triage.reasoning && <p className="text-slate-700">{triage.reasoning}</p>}
                               {triage.duplicate_of && <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700"><CircleAlert className="size-4" />Possible duplicate of {triage.duplicate_of}</p>}
+                              {triage.translating && <p className="flex items-center gap-1.5 text-sm text-navy-800"><Languages className="size-4" />The municipal desk will also see an English translation{voice ? " of your words and voice note" : ""}.</p>}
                             </motion.div>
                           )}
                         </div>

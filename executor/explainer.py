@@ -254,6 +254,35 @@ async def with_intermediates(host: str) -> "ssl.SSLContext":
     return ctx
 
 
+async def transcribe_audio(audio: bytes, media_type: str, language: str | None) -> dict:
+    """Speech to text: Whisper (large) through AIML API's queued speech-to-text. The audio is not stored.
+    With no language given, the service detects it, and the answer can then follow it."""
+    key = os.environ.get("AIMLAPI_KEY")
+    if not key:
+        raise HTTPException(503, "Voice questions need AIMLAPI_KEY on the server.")
+    base, auth = settings.aimlapi_base_url.rstrip("/"), {"Authorization": f"Bearer {key}"}
+    form = {"model": STT_MODEL, **({"language": language.split("-")[0]} if language else {"detect_language": "true"})}
+    try:
+        async with httpx.AsyncClient(timeout=30, transport=transport) as c:
+            r = await c.post(f"{base}/v1/stt/create", headers=auth, data=form, files={"audio": ("question", audio, media_type)})
+            r.raise_for_status()
+            job = r.json()["generation_id"]
+            deadline = time.monotonic() + STT_MAX_WAIT_S
+            while time.monotonic() < deadline:
+                await asyncio.sleep(1.0)
+                d = (await c.get(f"{base}/v1/stt/{job}", headers=auth)).json()
+                if d.get("status") == "completed":
+                    ch = d["result"]["results"]["channels"][0]
+                    detected = ch.get("detected_language") or (language or "").split("-")[0]
+                    code = f"{detected}-IN" if f"{detected}-IN" in LANGUAGES else None
+                    return {"text": ch["alternatives"][0]["transcript"].strip(), "language": code}
+                if d.get("status") not in {"queued", "generating"}:
+                    raise HTTPException(502, "Speech recognition failed. Please type your question.")
+    except (httpx.HTTPError, KeyError, ValueError, IndexError):
+        raise HTTPException(502, "Speech recognition is unavailable right now. Please type your question.")
+    raise HTTPException(504, "Speech recognition took too long. Please try a shorter question, or type it.")
+
+
 # ------------------------------------------------------------------ pipeline state (for the engine room)
 class Pipeline:
     def __init__(self, question: str):
@@ -581,32 +610,7 @@ class Explainer:
         return {"portal_id": portal.portal_id, "service_id": route.service_id, "label": label, "description": route.description}
 
     async def transcribe(self, audio: bytes, media_type: str, language: str | None) -> dict:
-        """A spoken question to text: Whisper (large) through AIML API's queued speech-to-text. The audio is not stored.
-        With no language given, the service detects it, and the answer can then follow it."""
-        key = os.environ.get("AIMLAPI_KEY")
-        if not key:
-            raise HTTPException(503, "Voice questions need AIMLAPI_KEY on the server.")
-        base, auth = settings.aimlapi_base_url.rstrip("/"), {"Authorization": f"Bearer {key}"}
-        form = {"model": STT_MODEL, **({"language": language.split("-")[0]} if language else {"detect_language": "true"})}
-        try:
-            async with httpx.AsyncClient(timeout=30, transport=transport) as c:
-                r = await c.post(f"{base}/v1/stt/create", headers=auth, data=form, files={"audio": ("question", audio, media_type)})
-                r.raise_for_status()
-                job = r.json()["generation_id"]
-                deadline = time.monotonic() + STT_MAX_WAIT_S
-                while time.monotonic() < deadline:
-                    await asyncio.sleep(1.0)
-                    d = (await c.get(f"{base}/v1/stt/{job}", headers=auth)).json()
-                    if d.get("status") == "completed":
-                        ch = d["result"]["results"]["channels"][0]
-                        detected = ch.get("detected_language") or (language or "").split("-")[0]
-                        code = f"{detected}-IN" if f"{detected}-IN" in LANGUAGES else None
-                        return {"text": ch["alternatives"][0]["transcript"].strip(), "language": code}
-                    if d.get("status") not in {"queued", "generating"}:
-                        raise HTTPException(502, "Speech recognition failed. Please type your question.")
-        except (httpx.HTTPError, KeyError, ValueError, IndexError):
-            raise HTTPException(502, "Speech recognition is unavailable right now. Please type your question.")
-        raise HTTPException(504, "Speech recognition took too long. Please try a shorter question, or type it.")
+        return await transcribe_audio(audio, media_type, language)
 
     @staticmethod
     def _shape(doc: dict, d: dict, language: str, script: str, audio_url: str | None, provider: str) -> dict:

@@ -10,17 +10,19 @@ Unifies:
 - AutoFile Escalation (Part 2 -> Part 3 bridge)
 """
 
+import logging
 import os
 import uuid
+from collections import Counter
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
 from server.db import (
-    get_db, User, Report, ReportEvent, ReceiptModel, Scheme, PortalRegistry
+    get_db, SessionLocal, User, Report, ReportEvent, ReceiptModel, Scheme, PortalRegistry
 )
 from server.auth import (
     create_access_token, get_current_user, require_role
@@ -36,7 +38,10 @@ from contracts.models import (
     CivicGuideRequest, CivicGuideResponse
 )
 from server.civic_guide import CivicGuide, GuideUnavailable
+from server.language import TranslationUnavailable, english_version, needs_english
+from server.privacy import UnreadableImage, blur_faces
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 _civic_guide = CivicGuide()
 
@@ -210,6 +215,7 @@ async def civic_guide_chat(
 @router.post("/api/v1/reports")
 @router.post("/app/part2/api/reports")
 async def create_and_triage_report(
+    background: BackgroundTasks,
     category: str = Form("other"),
     description: str = Form(""),
     latitude: float = Form(...),
@@ -229,6 +235,7 @@ async def create_and_triage_report(
     report_id = str(uuid.uuid4())
     evidence_urls = []
     photo_bytes = None
+    voice_bytes, voice_media = None, None
 
     # Handle Photo Upload
     if photo:
@@ -251,7 +258,7 @@ async def create_and_triage_report(
         if len(voice_bytes) > 0:
             try:
                 # Store voice note
-                media = (voice.content_type or "audio/webm").split(";")[0].strip()
+                media = voice_media = (voice.content_type or "audio/webm").split(";")[0].strip()
                 ext = {"audio/webm": ".webm", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a"}.get(media, ".webm")
                 v_res = upload_evidence(
                     file_bytes=voice_bytes,
@@ -334,7 +341,14 @@ async def create_and_triage_report(
     db.add(evt_triaged)
     db.commit()
 
+    # Written in an Indian language, or spoken: the desk gets an English version (the original stays). Runs after the
+    # response, so filing is never slowed down or blocked by the translation service.
+    translating = bool(voice_bytes or needs_english(description))
+    if translating:
+        background.add_task(_translate_later, report_id, description, voice_bytes, voice_media)
+
     return {
+        "translating": translating,
         "code": report.id,
         "id": report.id,
         "severity": report.severity,
@@ -360,36 +374,123 @@ async def upvote_report(id: str, db: Session = Depends(get_db)):
     return {"ok": True, "upvotes": report.upvotes}
 
 
+async def _translate_later(report_id: str, text: str, voice: bytes | None, media_type: str | None) -> None:
+    """Background: store the English version of a report as a TRANSLATED event. Never raises; the desk can retry."""
+    try:
+        result = await english_version(text, voice, media_type or "audio/webm")
+    except Exception as exc:  # the report is filed already; a failed translation only means the desk presses Translate
+        log.warning("translation of report %s failed: %s", report_id, exc)
+        return
+    if result:
+        _store_translation(report_id, result)
+
+
+def _store_translation(report_id: str, result: dict) -> None:
+    db = SessionLocal()
+    try:
+        db.add(ReportEvent(id=str(uuid.uuid4()), report_id=report_id, event_type="TRANSLATED", payload=result,
+                           actor_role="system", created_at=datetime.now(timezone.utc)))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _latest(db: Session, report_ids: list[str], types: tuple[str, ...]) -> dict[str, ReportEvent]:
+    """The most recent event of the given types for each report (one query)."""
+    if not report_ids:
+        return {}
+    rows = (db.query(ReportEvent).filter(ReportEvent.report_id.in_(report_ids), ReportEvent.event_type.in_(types))
+            .order_by(ReportEvent.created_at.asc()).all())
+    return {e.report_id: e for e in rows}
+
+
+# A citizen's word on a repair: the last of these events decides. A new RESOLVED (after a dispute) asks them again.
+VERDICT_EVENTS = ("RESOLVED", "CITIZEN_CONFIRMED", "DISPUTED")
+VERDICT = {"CITIZEN_CONFIRMED": "confirmed", "DISPUTED": "disputed"}
+
+
+def citizen_verdicts(db: Session, report_ids: list[str]) -> dict[str, str]:
+    return {rid: VERDICT[e.event_type] for rid, e in _latest(db, report_ids, VERDICT_EVENTS).items() if e.event_type in VERDICT}
+
+
+def translations(db: Session, report_ids: list[str]) -> dict[str, dict]:
+    return {rid: e.payload for rid, e in _latest(db, report_ids, ("TRANSLATED",)).items()}
+
+
+def _own_resolved_report(db: Session, report_id: str, user: User) -> Report:
+    report = _report_or_404(db, report_id)
+    if report.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Report not found")  # someone else's report: do not reveal it
+    if report.status != "RESOLVED":
+        raise HTTPException(status_code=409, detail="You can confirm or dispute a repair only after the municipality marks it resolved.")
+    if citizen_verdicts(db, [report.id]).get(report.id):
+        raise HTTPException(status_code=409, detail="You have already responded to this repair.")
+    return report
+
+
+@router.get("/api/v1/me/reports")
+async def my_reports(db: Session = Depends(get_db), user: User = Depends(require_role(["citizen", "admin"]))):
+    """The signed-in citizen's own reports, with what the municipality did and whether they still need to respond."""
+    rows = db.query(Report).filter(Report.user_id == user.id).order_by(desc(Report.created_at)).limit(50).all()
+    ids = [r.id for r in rows]
+    verdicts, english = citizen_verdicts(db, ids), translations(db, ids)
+    return [{
+        "id": r.id,
+        "category": r.category,
+        "description": r.description,
+        "status": r.status,
+        "severity": r.severity,
+        "ward": r.ward_name or r.ward_id,
+        "city": r.city,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "sla_deadline": r.sla_deadline.isoformat() if r.sla_deadline else None,
+        "resolution_notes": r.resolution_notes,
+        "resolution_proof_url": proof_link(r),
+        "citizen_verdict": verdicts.get(r.id),
+        "awaiting_your_check": r.status == "RESOLVED" and r.id not in verdicts,
+        "language": (english.get(r.id) or {}).get("language_name"),
+    } for r in rows]
+
+
+@router.post("/api/v1/reports/{id}/confirm")
+async def confirm_repair(id: str, db: Session = Depends(get_db), user: User = Depends(require_role(["citizen"]))):
+    """The citizen who reported it says the repair is real. Only then does the board show "confirmed by the citizen"."""
+    report = _own_resolved_report(db, id, user)
+    db.add(ReportEvent(id=str(uuid.uuid4()), report_id=report.id, event_type="CITIZEN_CONFIRMED", payload={},
+                       actor_role=user.role, actor_id=user.id, created_at=datetime.now(timezone.utc)))
+    db.commit()
+    return {"ok": True, "status": report.status, "citizen_verdict": "confirmed"}
+
+
+SEVERITY_UP = {"P4": "P3", "P3": "P2", "P2": "P1", "P1": "P1"}
+
+
 @router.post("/api/reports/{id}/dispute")
+@router.post("/api/v1/reports/{id}/dispute")
 async def dispute_report(
-    id: str, 
-    reason: str = Form("Issue not satisfactorily resolved"), 
+    id: str,
+    reason: str = Form("The problem is not fixed."),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(["citizen"]))
 ):
-    """Citizen dispute-repair: reopens closed/dissatisfied report, resets SLA, flags for admin review."""
-    report = db.query(Report).filter(Report.id == id).first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    report.status = "TRIAGED"
-    # Reset SLA to 24h emergency window
+    """The citizen who reported it says it is not fixed: the report reopens one priority higher with a 24-hour deadline.
+    The officer's proof photo and notes are kept in the report's history, and taken off the public card."""
+    report = _own_resolved_report(db, id, user)
     now = datetime.now(timezone.utc)
+    reason = reason.strip()[:1000] or "The problem is not fixed."
+    db.add(ReportEvent(id=str(uuid.uuid4()), report_id=report.id, event_type="DISPUTED",
+                       payload={"reason": reason, "disputed_proof": report.resolution_proof_url,
+                                "disputed_notes": report.resolution_notes, "severity_before": report.severity},
+                       actor_role=user.role, actor_id=user.id, created_at=now))
+    report.status = "ASSIGNED" if report.assigned_to else "TRIAGED"
+    report.severity = SEVERITY_UP.get(report.severity, report.severity)
     report.sla_deadline = now + timedelta(hours=24)
+    report.resolution_proof_url = None
+    report.resolution_notes = None
     report.updated_at = now
-    
-    evt = ReportEvent(
-        id=str(uuid.uuid4()),
-        report_id=report.id,
-        event_type="DISPUTED",
-        payload={"reason": reason},
-        actor_role=user.role,
-        actor_id=user.id,
-        created_at=now
-    )
-    db.add(evt)
     db.commit()
-    return {"ok": True, "status": report.status, "message": "Report disputed and reopened for review."}
+    return {"ok": True, "status": report.status, "severity": report.severity, "citizen_verdict": "disputed",
+            "message": "Reopened. The municipal desk sees it again, one priority higher, due within 24 hours."}
 
 
 # ==============================================================================
@@ -403,7 +504,8 @@ async def get_public_reports(db: Session = Depends(get_db)):
     """Returns reports formatted for the public board and map visualization."""
     reports = db.query(Report).order_by(desc(Report.created_at)).limit(100).all()
     now = datetime.now(timezone.utc)
-    
+    verdicts = citizen_verdicts(db, [r.id for r in reports])
+
     formatted = []
     for r in reports:
         is_breached = bool(r.sla_deadline and r.sla_deadline < now and r.status != "RESOLVED")
@@ -424,6 +526,7 @@ async def get_public_reports(db: Session = Depends(get_db)):
             "evidence_count": len(r.evidence_urls or []),
             "resolution_proof_url": proof_link(r),
             "resolution_notes": r.resolution_notes,
+            "citizen_verdict": verdicts.get(r.id),
             "duplicate_of": str(r.duplicate_of) if r.duplicate_of else None
         })
     return formatted
@@ -453,14 +556,34 @@ async def get_public_stats(db: Session = Depends(get_db)):
         resolution_hours.append(max(1.0, diff))
     # No resolved reports yet: say so (null), never a made-up average.
     avg_hours = round(sum(resolution_hours) / len(resolution_hours), 1) if resolution_hours else None
+    verdicts = citizen_verdicts(db, [r.id for r in resolved])
 
     return {
         "total": total,
         "open": open_count,
         "resolved_pct": resolved_pct,
         "avg_resolution_hours": avg_hours,
-        "sla_breached": sla_breached
+        "sla_breached": sla_breached,
+        "citizen_confirmed": sum(1 for v in verdicts.values() if v == "confirmed"),
+        "hotspots": hotspots(reports, now),
     }
+
+
+def hotspots(reports: list, now: datetime, top: int = 5) -> list[dict]:
+    """Wards with the most open reports, from real reports only. Duplicates count: many people reporting the same
+    problem is exactly the signal."""
+    areas: dict[tuple, dict] = {}
+    for r in reports:
+        key = (r.ward_name or r.ward_id, r.city)
+        a = areas.setdefault(key, {"ward": key[0], "city": key[1], "reports": 0, "open": 0, "past_deadline": 0, "_cats": Counter()})
+        a["reports"] += 1
+        a["_cats"][r.category] += 1
+        if r.status not in ("RESOLVED", "REJECTED"):
+            a["open"] += 1
+            if r.sla_deadline and r.sla_deadline < now:
+                a["past_deadline"] += 1
+    ranked = sorted(areas.values(), key=lambda a: (-a["open"], -a["past_deadline"], -a["reports"], a["ward"] or ""))[:top]
+    return [{**{k: v for k, v in a.items() if k != "_cats"}, "top_category": a["_cats"].most_common(1)[0][0]} for a in ranked]
 
 
 # ==============================================================================
@@ -490,6 +613,9 @@ async def get_admin_queue(
     ).all()
 
     now = datetime.now(timezone.utc)
+    ids = [r.id for r in reports]
+    verdicts, english = citizen_verdicts(db, ids), translations(db, ids)
+    disputes = {rid: e.payload for rid, e in _latest(db, ids, ("DISPUTED",)).items()}
     queue = []
     for r in reports:
         is_breached = bool(r.sla_deadline and r.sla_deadline < now and r.status != "RESOLVED")
@@ -512,9 +638,41 @@ async def get_admin_queue(
             "duplicate_of": str(r.duplicate_of) if r.duplicate_of else None,
             "evidence_urls": evidence_links(r),
             "resolution_proof_url": proof_link(r),
+            "resolution_notes": r.resolution_notes,
+            "translation": english.get(r.id),
+            "needs_translation": r.id not in english and (needs_english(r.description or "") or _voice_ref(r) is not None),
+            "citizen_verdict": verdicts.get(r.id),
+            "last_dispute": disputes.get(r.id, {}).get("reason") if verdicts.get(r.id) == "disputed" or r.id in disputes else None,
             "created_at": r.created_at.isoformat()
         })
     return queue
+
+
+AUDIO_EXTS = (".webm", ".ogg", ".mp3", ".m4a")
+
+
+def _voice_ref(r) -> str | None:
+    return next((ref for ref in (r.evidence_urls or []) if str(ref).lower().endswith(AUDIO_EXTS)), None)
+
+
+@router.post("/api/v1/admin/reports/{id}/translate")
+async def admin_translate_report(id: str, db: Session = Depends(get_db), admin_user: User = Depends(require_role(["admin"]))):
+    """English version of a report written or spoken in another language (also retries a failed background one)."""
+    report = _report_or_404(db, id)
+    voice, media = None, None
+    ref = _voice_ref(report)
+    if ref and storage_path_of(ref):
+        got = read_evidence(storage_path_of(ref))
+        if got:
+            voice, media = got
+    try:
+        result = await english_version(report.description or "", voice, media or "audio/webm")
+    except TranslationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not result:
+        return {"ok": True, "translation": None, "message": "This report is already in English."}
+    _store_translation(report.id, result)
+    return {"ok": True, "translation": result}
 
 
 @router.post("/api/v1/admin/reports/{id}/triage")
@@ -685,11 +843,20 @@ async def admin_resolve_report(
     if not photo_bytes or len(photo_bytes) == 0:
         raise HTTPException(status_code=400, detail="Mandatory resolution proof photo is required to resolve a ticket.")
 
+    # The proof photo is public: blur detected faces and drop the metadata (EXIF, GPS) before it is stored.
+    try:
+        validate_file(photo_bytes, proof_photo.filename or "resolution_proof.jpg", proof_photo.content_type or "image/jpeg")
+        photo_bytes, faces_blurred = blur_faces(photo_bytes)
+    except StorageValidationError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except UnreadableImage as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     try:
         upload_res = upload_evidence(
             file_bytes=photo_bytes,
-            filename=proof_photo.filename or "resolution_proof.jpg",
-            content_type=proof_photo.content_type or "image/jpeg",
+            filename="resolution_proof.jpg",
+            content_type="image/jpeg",
             report_id=report.id
         )
     except StorageValidationError as e:
@@ -707,7 +874,8 @@ async def admin_resolve_report(
         event_type="RESOLVED",
         payload={
             "resolution_notes": resolution_notes,
-            "proof_ref": upload_res["ref"]
+            "proof_ref": upload_res["ref"],
+            "faces_blurred": faces_blurred
         },
         actor_role="admin",
         actor_id=admin_user.id,
@@ -719,7 +887,8 @@ async def admin_resolve_report(
         "ok": True, 
         "status": report.status, 
         "resolution_proof_url": proof_link(report),
-        "resolution_notes": report.resolution_notes
+        "resolution_notes": report.resolution_notes,
+        "faces_blurred": faces_blurred
     }
 
 

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Bot, ChartColumn, CircleCheck, Clock, Inbox, MapPin, Radio, ShieldAlert } from "lucide-react";
+import { BadgeCheck, Bot, ChartColumn, CircleAlert, CircleCheck, Clock, Flame, Inbox, MapPin, Radio, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,8 +7,9 @@ import { api, secs, type AppConfig, type Run } from "../api";
 import { Badge, Card, CountUp, fadeUp, NotConnected, stagger } from "../components/ui";
 
 /** Part 2 contract (docs/UI_CONTRACT.md): GET /api/public/reports and GET /api/public/stats. */
-type Report = { code: string; lat: number; lng: number; severity: "P1" | "P2" | "P3"; status: string; category: string; source: "citizen" | "agent"; ward?: string; sla_breached?: boolean; resolution_proof_url?: string | null };
-type Stats = { total: number; open: number; resolved_pct: number; avg_resolution_hours: number | null; sla_breached: number };
+type Report = { code: string; lat: number; lng: number; severity: "P1" | "P2" | "P3"; status: string; category: string; source: "citizen" | "agent"; ward?: string; sla_breached?: boolean; resolution_proof_url?: string | null; citizen_verdict?: "confirmed" | "disputed" | null };
+type Hotspot = { ward: string; city: string; reports: number; open: number; past_deadline: number; top_category: string };
+type Stats = { total: number; open: number; resolved_pct: number; avg_resolution_hours: number | null; sla_breached: number; citizen_confirmed?: number; hotspots?: Hotspot[] };
 
 const SEV_COLOR = { P1: "#DC2626", P2: "#FF9933", P3: "#138808" } as const;
 const COLUMNS = [
@@ -145,8 +146,10 @@ export default function Board() {
                         <div className="flex items-center justify-between gap-2 font-mono font-bold" title={r.code}>#{r.code.slice(0, 8)}<span className="size-2.5 shrink-0 rounded-full" style={{ background: SEV_COLOR[r.severity] }} /></div>
                         <div className="mt-1 truncate text-slate-600">{r.category.replace(/_/g, " ")}{r.ward ? ` · ${r.ward}` : ""}</div>
                         {r.resolution_proof_url && (
-                          <a href={r.resolution_proof_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 font-semibold text-leaf-700 underline-offset-2 hover:underline">Proof photo</a>
+                          <a href={r.resolution_proof_url} target="_blank" rel="noopener noreferrer" title="Detected faces are blurred before publishing" className="mt-1 inline-flex items-center gap-1 font-semibold text-leaf-700 underline-offset-2 hover:underline">Proof photo</a>
                         )}
+                        {r.citizen_verdict === "confirmed" && <div className="mt-1 flex items-center gap-1 font-semibold text-leaf-700"><BadgeCheck className="size-3.5" />Confirmed by the citizen</div>}
+                        {r.citizen_verdict === "disputed" && r.status !== "resolved" && <div className="mt-1 flex items-center gap-1 font-semibold text-red-700"><CircleAlert className="size-3.5" />Reopened: citizen says not fixed</div>}
                         {r.source === "agent" && <Badge tone="navy" className="mt-1"><Bot className="size-3" />Agent</Badge>}
                       </motion.div>
                     ))}
@@ -157,6 +160,30 @@ export default function Board() {
           </div>
         ) : (
           config && <NotConnected part="The grievance pipeline (Part 2)" endpoint="PART2_API_URL" what="Its reports flow through Submitted, Routed, In progress and Resolved here, with deadlines and severity." />
+        )}
+        <div className="grid gap-6 lg:grid-cols-2">
+        {stats?.hotspots && (
+          <Card variant="glass" className="p-5">
+            <h2 className="flex items-center gap-2 text-lg font-extrabold text-navy-900"><Flame className="size-5 text-saffron-600" />Most-reported areas</h2>
+            <p className="mt-1 text-xs text-slate-500">Wards ranked by open reports. Real reports only; several people reporting the same problem all count.</p>
+            <ol className="mt-4 space-y-3">
+              {stats.hotspots.length === 0 && <li className="text-sm text-slate-600">No reports yet.</li>}
+              {stats.hotspots.map((h, i) => (
+                <li key={`${h.ward}-${h.city}`} className="flex min-w-0 items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-navy-50 font-mono text-sm font-bold text-navy-800">{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold text-navy-900">{h.ward || "Unmapped ward"}, {h.city}</div>
+                    <div className="text-xs text-slate-500">Mostly {h.top_category.replace(/_/g, " ")} · {h.reports} report{h.reports === 1 ? "" : "s"} in all</div>
+                  </div>
+                  <div className="shrink-0 text-right text-sm">
+                    <div className="font-bold text-navy-900">{h.open} open</div>
+                    {h.past_deadline > 0 && <div className="text-xs font-semibold text-red-700">{h.past_deadline} past deadline</div>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+            {stats.citizen_confirmed != null && <p className="mt-4 flex items-center gap-1.5 border-t border-navy-100 pt-3 text-sm text-slate-700"><BadgeCheck className="size-4 text-leaf-600" /><b>{stats.citizen_confirmed}</b> repair{stats.citizen_confirmed === 1 ? "" : "s"} confirmed by the citizens who reported them</p>}
+          </Card>
         )}
         <Card variant="glass" className="p-5">
           <h2 className="text-lg font-extrabold text-navy-900">By category</h2>
@@ -170,6 +197,7 @@ export default function Board() {
             ))}
           </ul>
         </Card>
+        </div>
       </div>
     </div>
   );

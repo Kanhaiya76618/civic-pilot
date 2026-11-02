@@ -189,6 +189,22 @@ export const civicGuide = {
     }).then(json<CivicGuideAnswer>),
 };
 
+/** Part 2: the signed-in citizen's own reports, and their word on a repair. */
+export type MyReport = {
+  id: string; category: string; description: string; status: string; severity: string; ward: string | null; city: string;
+  created_at: string | null; sla_deadline: string | null; resolution_notes: string | null; resolution_proof_url: string | null;
+  citizen_verdict: "confirmed" | "disputed" | null; awaiting_your_check: boolean; language: string | null;
+};
+export const myReports = {
+  list: () => fetch("/api/v1/me/reports", { headers: authHeaders() }).then(json<MyReport[]>),
+  confirm: (id: string) => fetch(`/api/v1/reports/${id}/confirm`, { method: "POST", headers: authHeaders() }).then(json<{ ok: boolean }>),
+  dispute: (id: string, reason: string) => {
+    const fd = new FormData();
+    fd.append("reason", reason);
+    return fetch(`/api/v1/reports/${id}/dispute`, { method: "POST", headers: authHeaders(), body: fd }).then(json<{ ok: boolean; message: string }>);
+  },
+};
+
 /** Keep a line in the signed-in citizen's history. Never blocks or breaks the action that triggered it. */
 export function remember(entry: Parameters<typeof me.add>[0]) {
   if (!authHeaders().Authorization) return;

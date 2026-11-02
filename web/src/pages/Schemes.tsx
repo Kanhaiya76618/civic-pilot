@@ -4,13 +4,9 @@ import { createContext, useContext, useEffect, useRef, useState, type FormEvent 
 import { Link, useSearchParams } from "react-router-dom";
 import { api, remember, type AppConfig, type Service } from "../api";
 import { ServiceForm } from "../components/ServiceForm";
+import { LANGS } from "../languages";
 import { Badge, Button, Card, fadeUp, NotConnected, SectionTitle, stagger, useToast } from "../components/ui";
 
-const LANGS = [
-  { code: "hi-IN", label: "हिन्दी" }, { code: "en-IN", label: "English" }, { code: "bn-IN", label: "বাংলা" }, { code: "ta-IN", label: "தமிழ்" },
-  { code: "te-IN", label: "తెలుగు" }, { code: "mr-IN", label: "मराठी" }, { code: "gu-IN", label: "ગુજરાતી" }, { code: "kn-IN", label: "ಕನ್ನಡ" },
-  { code: "ml-IN", label: "മലയാളം" }, { code: "pa-IN", label: "ਪੰਜਾਬੀ" }, { code: "or-IN", label: "ଓଡ଼ିଆ" }, { code: "ur-IN", label: "اردو" },
-];
 
 // Real official documents, to try it quickly. Any .gov.in / .nic.in link, PDF or pasted text works the same way.
 const SAMPLES = [
