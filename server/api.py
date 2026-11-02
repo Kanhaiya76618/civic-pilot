@@ -370,6 +370,9 @@ async def create_and_triage_report(
                 evidence_urls.append(upload_res["ref"])
             except StorageValidationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message)
+            except Exception as exc:
+                log.warning("photo for report %s not stored: %s", report_id, exc)
+                raise HTTPException(status_code=502, detail="The photo could not be saved right now. Please try again.") from exc
 
     # Handle Voice Upload
     if voice:
@@ -388,6 +391,8 @@ async def create_and_triage_report(
                 evidence_urls.append(v_res["ref"])
             except StorageValidationError as e:
                 raise HTTPException(status_code=e.status_code, detail=f"Voice note: {e.message}")
+            except Exception as exc:  # storage refused it (e.g. the bucket does not allow audio): the report still goes
+                log.warning("voice note for report %s not stored: %s", report_id, exc)
 
     # Run AI Triage Engine
     triage = compute_triage_decision(

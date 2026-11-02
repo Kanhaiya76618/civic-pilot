@@ -339,3 +339,16 @@ def test_groq_client_reads_transcripts_and_json(monkeypatch):
     monkeypatch.setattr(groq, "transport", httpx.MockTransport(lambda r: httpx.Response(404, json={})))
     with pytest.raises(groq.GroqUnavailable):
         asyncio.run(groq.chat_json("s", "u"))
+
+
+def test_a_voice_note_storage_refuses_does_not_block_the_report(client, monkeypatch, fake_translator):
+    real = api.upload_evidence
+
+    def picky(file_bytes, filename, content_type, report_id):
+        if content_type.startswith("audio/"):
+            raise RuntimeError("400 Bad Request: mime type audio/webm is not supported")
+        return real(file_bytes=file_bytes, filename=filename, content_type=content_type, report_id=report_id)
+
+    monkeypatch.setattr(api, "upload_evidence", picky)
+    filed = file_report(client, citizen_headers(), "Pothole near the school gate", voice=b"\x1aE\xdf\xa3 webm")
+    assert filed["ticket"].startswith("CIV-")
