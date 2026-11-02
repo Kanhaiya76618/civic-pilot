@@ -206,10 +206,14 @@ Rules:
 - Never request Aadhaar, account/card number, password, OTP, or other sensitive information.
 - Keep the answer under 350 words, use short headings and bullets, and answer in the requested language when possible.
 """
+        # llama-3.3-70b-versatile was retired by Groq on 2026-08-16; gpt-oss-120b is its listed replacement.
+        model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         payload = {
-            "model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            "model": model,
             "temperature": 0.2,
-            "max_tokens": 700,
+            # gpt-oss reasons before answering, and those tokens count against max_tokens.
+            "max_tokens": 2000 if model.startswith("openai/gpt-oss") else 700,
+            **({"reasoning_effort": "low", "include_reasoning": False} if model.startswith("openai/gpt-oss") else {}),
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"Requested language: {language}\nCitizen question: {question}\n\nOFFICIAL SOURCE MATERIAL:\n{evidence}"},
