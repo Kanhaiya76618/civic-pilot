@@ -34,6 +34,15 @@ type AdminReport = {
   needs_translation: boolean;
   citizen_verdict: "confirmed" | "disputed" | null;
   last_dispute: string | null;
+  ticket: string;
+  department: string;
+  findings: string[];
+  reasons: string[];
+  detections: { box: [number, number, number, number]; confidence: number }[];
+  photo_urls: string[];
+  voice_url: string | null;
+  transcript: string | null;
+  place: string | null;
   created_at: string;
 };
 
@@ -402,8 +411,12 @@ export default function AdminDesk() {
               <div className="flex-1">
                 {/* Header Pills */}
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-navy-900 px-2 py-0.5 font-mono text-xs font-bold text-white">{r.ticket}</span>
                   <span className={`rounded-md border px-2 py-0.5 text-xs font-extrabold ${SEV_BADGE[r.severity]}`}>
                     {r.severity}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-saffron-50 px-2 py-0.5 text-xs font-bold text-saffron-800">
+                    <Building2 className="size-3" /> {r.department}
                   </span>
                   <span className="rounded-md bg-navy-100 px-2 py-0.5 text-xs font-semibold text-navy-800">
                     {r.ward_name} ({r.ward_id}) · {r.city}
@@ -459,11 +472,39 @@ export default function AdminDesk() {
                   <p className="mt-2 rounded-xl bg-red-50 p-2.5 text-sm text-red-900 ring-1 ring-red-100"><b>Citizen says it is not fixed:</b> {r.last_dispute}</p>
                 )}
 
+                {/* The citizen's evidence and what the checks found: officers only */}
+                {(r.photo_urls.length > 0 || r.voice_url || r.findings.length > 0) && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                    {r.photo_urls.length > 0 && (
+                      <a href={r.photo_urls[0]} target="_blank" rel="noreferrer" className="relative block self-start overflow-hidden rounded-xl ring-1 ring-navy-100">
+                        <img src={r.photo_urls[0]} alt="Citizen's photo of the problem" loading="lazy" className="block w-full" />
+                        {/* Where the pothole model found potholes (boxes are fractions of the photo) */}
+                        {r.detections.map((d, i) => (
+                          <span key={i} className="absolute border-2 border-saffron-500" style={{ left: `${d.box[0] * 100}%`, top: `${d.box[1] * 100}%`, width: `${(d.box[2] - d.box[0]) * 100}%`, height: `${(d.box[3] - d.box[1]) * 100}%` }}>
+                            <span className="absolute -top-px left-0 bg-saffron-500 px-1 text-[10px] font-bold text-navy-900">{Math.round(d.confidence * 100)}%</span>
+                          </span>
+                        ))}
+                      </a>
+                    )}
+                    <div className="min-w-0 space-y-2 text-sm">
+                      {r.findings.length > 0 && (
+                        <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Photo check</div>
+                          <ul className="mt-1 space-y-0.5 text-slate-700">{r.findings.map((f, i) => <li key={i}>• {f}</li>)}</ul>
+                        </div>
+                      )}
+                      {r.reasons.length > 0 && <p className="text-xs text-slate-600"><b>Why {r.severity}:</b> {r.reasons.join(" ")}</p>}
+                      {r.voice_url && <audio src={r.voice_url} controls preload="none" className="h-9 w-full max-w-sm" />}
+                      {r.transcript && !r.translation?.transcript && <p className="text-xs text-slate-600" dir="auto"><b>Voice note said:</b> {r.transcript}</p>}
+                    </div>
+                  </div>
+                )}
+
                 {/* Metadata & POI proximity */}
                 <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
                     <MapPin className="size-3.5 text-slate-400" />
-                    {r.latitude.toFixed(4)}, {r.longitude.toFixed(4)}
+                    {r.place ? `${r.place} · ` : ""}{r.latitude.toFixed(4)}, {r.longitude.toFixed(4)}
                   </span>
                   {r.poi_multiplier > 1.0 && (
                     <span className="font-semibold text-amber-700">

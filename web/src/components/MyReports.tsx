@@ -49,10 +49,10 @@ export function MyReports({ refreshKey = 0 }: { refreshKey?: number }) {
                 <Badge tone={st.tone}>{st.label}</Badge>
                 <span className="text-sm font-semibold text-navy-900">{r.category.replace(/_/g, " ")}</span>
                 {r.language && r.language !== "English" && <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Languages className="size-3.5" />{r.language}</span>}
-                <span className="ml-auto font-mono text-xs text-slate-500" title={r.id}>#{r.id.slice(0, 8)}</span>
+                <span className="ml-auto font-mono text-xs font-bold text-navy-700" title={r.id}>{r.ticket}</span>
               </div>
               <p className="mt-2 line-clamp-2 break-words text-sm text-slate-700">{r.description}</p>
-              <p className="mt-1 text-xs text-slate-500">{[r.ward, r.city].filter(Boolean).join(", ")} · reported {ago(r.created_at)}</p>
+              <p className="mt-1 text-xs text-slate-500">{r.department} · {[r.ward, r.city].filter(Boolean).join(", ")} · reported {ago(r.created_at)}</p>
 
               {r.resolution_notes && <p className="mt-3 rounded-xl bg-leaf-50 p-2.5 text-sm text-leaf-900"><b>Municipality:</b> {r.resolution_notes}</p>}
               {r.resolution_proof_url && (

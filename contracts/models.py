@@ -41,6 +41,7 @@ class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=80)
     email: str
     password: str = Field(..., min_length=8, max_length=128)
+    officer_code: Optional[str] = Field(None, max_length=200)  # municipal access code: creates an officer account
 
 # ----------------- Civic guide (official-source grounded chat) -----------------
 

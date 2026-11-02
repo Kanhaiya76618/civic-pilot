@@ -10,6 +10,7 @@ outcome only, never personal data.
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
 import uuid
@@ -77,6 +78,8 @@ def make_router(ex: Callable) -> APIRouter:
             "part2_connected": True,
             "ai_available": bool(ex().llm),
             "sandbox_url_internal": bool(settings.sandbox_url),
+            "judge_demo": os.environ.get("CIVIC_JUDGE_DEMO") == "1",  # one-click demo accounts on the sign-in page
+            "officer_signup": bool(os.environ.get("CIVIC_OFFICER_SIGNUP_CODE")),
         }
 
     async def _proxy(base: str, path: str, request: Request) -> Response:

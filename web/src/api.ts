@@ -45,7 +45,7 @@ export type TaskState = {
   human: { kind: string; instructions: string } | null; approval_pending: boolean; card: ApprovalCard | null;
   timing: Timing; receipt: Receipt | null; page_url: string | null; has_final: boolean; events: TaskEvent[];
 };
-export type AppConfig = { part1_connected: boolean; part2_connected: boolean; ai_available: boolean };
+export type AppConfig = { part1_connected: boolean; part2_connected: boolean; ai_available: boolean; judge_demo?: boolean; officer_signup?: boolean };
 export type Lookup = { ok: boolean | null; source: string; data: Record<string, any>; error: string | null };
 
 export const TERMINAL = new Set(["completed", "failed", "needs_review"]);
@@ -193,7 +193,7 @@ export const civicGuide = {
 export type MyReport = {
   id: string; category: string; description: string; status: string; severity: string; ward: string | null; city: string;
   created_at: string | null; sla_deadline: string | null; resolution_notes: string | null; resolution_proof_url: string | null;
-  citizen_verdict: "confirmed" | "disputed" | null; awaiting_your_check: boolean; language: string | null;
+  citizen_verdict: "confirmed" | "disputed" | null; awaiting_your_check: boolean; language: string | null; ticket: string; department: string;
 };
 export const myReports = {
   list: () => fetch("/api/v1/me/reports", { headers: authHeaders() }).then(json<MyReport[]>),
@@ -203,6 +203,29 @@ export const myReports = {
     fd.append("reason", reason);
     return fetch(`/api/v1/reports/${id}/dispute`, { method: "POST", headers: authHeaders(), body: fd }).then(json<{ ok: boolean; message: string }>);
   },
+};
+
+/** Part 2 intake: what the checks see before filing (nothing saved), the voice note as text, and the ticket. */
+export type ReportPreview = {
+  perception: { pothole_detected?: boolean; pothole_count?: number; method?: string | null; is_blurry?: boolean };
+  findings: string[]; findings_local?: string[]; reasons?: string[]; reasons_local?: string[];
+  annotated_photo: string | null; department: string; severity?: string; severity_name?: string; sla_hours?: number;
+  ward_name?: string; ward_id?: string; city?: string; nearest_poi?: string | null; nearest_poi_distance_m?: number | null;
+  nearby_report?: { ticket: string; status: string; distance_m: number } | null;
+};
+export type FiledReport = {
+  ticket: string; id: string; department: string; severity: string; severity_name: string; sla_hours: number; sla_deadline: string | null;
+  ward_name: string; city: string; reasons: string[]; findings: string[]; translating: boolean; duplicate_of: string | null;
+};
+export type Heard = { text: string; language: string | null; language_name: string | null };
+export const reportApi = {
+  transcribe: (audio: Blob) => {
+    const fd = new FormData();
+    fd.append("audio", audio, `voice-note.${audio.type.includes("ogg") ? "ogg" : audio.type.includes("mp4") ? "m4a" : "webm"}`);
+    return fetch("/api/v1/reports/transcribe", { method: "POST", headers: authHeaders(), body: fd }).then(json<Heard>);
+  },
+  preview: (fd: FormData) => fetch("/api/v1/reports/preview", { method: "POST", headers: authHeaders(), body: fd }).then(json<ReportPreview>),
+  file: (fd: FormData) => fetch("/api/v1/reports", { method: "POST", headers: authHeaders(), body: fd }).then(json<FiledReport>),
 };
 
 /** Keep a line in the signed-in citizen's history. Never blocks or breaks the action that triggered it. */

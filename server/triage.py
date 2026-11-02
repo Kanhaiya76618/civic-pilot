@@ -79,22 +79,15 @@ def load_ward_boundaries():
     return _ward_cache
 
 
-def lookup_ward(lat: float, lng: float) -> Tuple[str, str, str]:
-    """Finds ward containing given lat/lng via Point-in-Polygon."""
+def lookup_ward(lat: float, lng: float, district: Optional[str] = None) -> Tuple[str, str, str]:
+    """Finds ward containing given lat/lng via Point-in-Polygon. Outside the ward maps we have, it says so: the
+    report keeps its district (from the PIN code) and is marked unmapped, never given a made-up ward."""
     wards = load_ward_boundaries()
     pt = Point(lng, lat)  # GeoJSON is [lng, lat]
     for w in wards:
         if w["polygon"].contains(pt):
             return w["ward_id"], w["ward_name"], w["city"]
-
-    # Fallback to nearest city center if outside explicit boundaries
-    if 12.8 <= lat <= 13.2 and 77.4 <= lng <= 77.8:
-        return "BBMP-111", "Shantinagar", "Bengaluru"
-    elif 18.4 <= lat <= 18.7 and 73.7 <= lng <= 74.0:
-        return "PMC-12", "Kothrud", "Pune"
-    elif 28.4 <= lat <= 28.9 and 77.0 <= lng <= 77.4:
-        return "MCD-54", "Karol Bagh", "Delhi"
-    return "WARD-01", "Central Ward", "Urban Local Body"
+    return "UNMAPPED", "Ward not mapped yet", (district or "Outside mapped cities").strip()[:100]
 
 
 # ----------------- HAVERSINE & SPATIAL DEDUP -----------------
@@ -185,6 +178,10 @@ def assess_image(image_bytes: bytes) -> Dict[str, Any]:
     result = {
         "pothole_detected": False,
         "pothole_confidence": 0.0,
+        "pothole_count": 0,
+        "largest_pothole_pct": 0.0,  # of the photo's area; the photo has no scale, so no square metres
+        "detections": [],  # normalised boxes [x0, y0, x1, y1] with confidence, for drawing
+        "method": None,  # "yolo" (the trained pothole model) or "texture" (a fallback guess from crack texture)
         "crack_percentage": 0.0,
         "blur_score": 0.0,
         "is_blurry": False
@@ -200,7 +197,7 @@ def assess_image(image_bytes: bytes) -> Dict[str, Any]:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blur_var = cv2.Laplacian(gray, cv2.CV_64F).var()
         result["blur_score"] = round(float(blur_var), 2)
-        result["is_blurry"] = blur_var < 80.0
+        result["is_blurry"] = bool(blur_var < 80.0)
 
         # 2. Black-Hat Crack Morphology
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
@@ -212,13 +209,20 @@ def assess_image(image_bytes: bytes) -> Dict[str, Any]:
         # 3. YOLOv8 Pothole Detection
         yolo = get_yolo_model()
         if yolo:
+            result["method"] = "yolo"
             yolo_res = yolo.predict(img, conf=0.25, verbose=False)
             if yolo_res and len(yolo_res) > 0 and len(yolo_res[0].boxes) > 0:
-                top_conf = float(yolo_res[0].boxes.conf.max().cpu().numpy())
+                boxes = yolo_res[0].boxes
+                found = sorted(((float(c), [round(float(v), 4) for v in xy]) for c, xy in
+                                zip(boxes.conf.cpu().numpy(), boxes.xyxyn.cpu().numpy())), reverse=True)
+                result["detections"] = [{"box": xy, "confidence": round(c, 3)} for c, xy in found]
                 result["pothole_detected"] = True
-                result["pothole_confidence"] = round(top_conf, 3)
+                result["pothole_count"] = len(found)
+                result["pothole_confidence"] = round(found[0][0], 3)
+                result["largest_pothole_pct"] = round(max((b[2] - b[0]) * (b[3] - b[1]) for _, b in found) * 100, 1)
         elif result["crack_percentage"] > 3.0:
             # Fallback heuristic if YOLO model not loaded
+            result["method"] = "texture"
             result["pothole_detected"] = True
             result["pothole_confidence"] = min(0.95, round(result["crack_percentage"] / 10.0, 2))
 
@@ -262,18 +266,19 @@ def compute_triage_decision(
     lat: float,
     lng: float,
     image_bytes: Optional[bytes] = None,
-    db = None
+    db = None,
+    district: Optional[str] = None,
+    perception: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Unified triage pipeline computing ward, deduplication, severity, and SLA.
     """
     # 1. Ward Lookup
-    ward_id, ward_name, city = lookup_ward(lat, lng)
+    ward_id, ward_name, city = lookup_ward(lat, lng, district)
 
     # 2. Perception (CV & NLP)
-    perception = {}
-    if image_bytes:
-        perception = assess_image(image_bytes)
+    if perception is None:  # callers that already ran the photo check pass it in, so the model runs once
+        perception = assess_image(image_bytes) if image_bytes else {}
 
     detected_cat, urgency = analyze_text_intent(description)
     final_category = category or detected_cat or "other"
@@ -287,15 +292,19 @@ def compute_triage_decision(
     nearest_poi, poi_dist, multiplier = get_nearest_poi(lat, lng)
 
     # 5. Severity Rating Computation
-    base_severity = "P3"
+    base_severity, reasons = "P3", []
     if urgency == "critical" or "burst" in description.lower() or "hospital" in description.lower():
         base_severity = "P1"
+        reasons.append("The description mentions an emergency or a danger to people.")
     elif perception.get("pothole_detected") and perception.get("pothole_confidence", 0) > 0.6:
         base_severity = "P2"
+        reasons.append(f"The photo shows a pothole ({round(perception['pothole_confidence'] * 100)}% confidence).")
     elif perception.get("crack_percentage", 0) > 5.0:
         base_severity = "P2"
+        reasons.append(f"Rough or cracked surface covers about {perception['crack_percentage']}% of the photo.")
     elif final_category in ["water", "drainage"] and "overflow" in description.lower():
         base_severity = "P2"
+        reasons.append("Water or drainage is overflowing.")
 
     # Bump severity if near hospital/school with multiplier >= 1.4
     final_severity = base_severity
@@ -304,6 +313,10 @@ def compute_triage_decision(
             final_severity = "P1"
         elif base_severity == "P3":
             final_severity = "P2"
+        if final_severity != base_severity:
+            reasons.append(f"It is {round(poi_dist)} m from {nearest_poi}, so it is raised one level.")
+    if not reasons:
+        reasons.append("No sign of immediate danger, so it gets the standard deadline.")
 
     # SLA deadlines: P1 = 24h, P2 = 48h, P3 = 72h, P4 = 120h
     sla_map = {"P1": 24, "P2": 48, "P3": 72, "P4": 120}
@@ -321,5 +334,70 @@ def compute_triage_decision(
         "nearest_poi": nearest_poi,
         "nearest_poi_distance_m": poi_dist,
         "duplicate_of": dup_report_id,
-        "perception": perception
+        "perception": perception,
+        "reasons": reasons,
+        "department": department_for(final_category),
     }
+
+
+# ----------------- ROUTING & PLAIN-LANGUAGE FINDINGS -----------------
+
+# Which municipal department handles each category (the report form's categories, and the older short ids).
+DEPARTMENTS = {
+    "Road and Bridges": "Roads & Engineering", "roads_potholes": "Roads & Engineering",
+    "Water Supply": "Water Supply", "water": "Water Supply",
+    "Sanitation and Garbage": "Solid Waste Management", "garbage": "Solid Waste Management",
+    "Street Lights": "Electrical (Street Lighting)", "streetlights": "Electrical (Street Lighting)",
+    "drainage": "Drainage & Sewerage", "Pollution": "Environment",
+}
+
+
+def department_for(category: Optional[str]) -> str:
+    return DEPARTMENTS.get(category or "", "Ward Office")
+
+
+SEVERITY_NAMES = {"P1": "Critical", "P2": "High", "P3": "Medium", "P4": "Low"}
+
+
+def findings(perception: Dict[str, Any]) -> List[str]:
+    """What the computer-vision check found in the photo, as plain sentences (no guesses beyond the numbers)."""
+    if not perception:
+        return []
+    out = []
+    if perception.get("method") == "yolo":
+        n = perception.get("pothole_count", 0)
+        if n:
+            out.append(f"{n} pothole{'s' if n > 1 else ''} found by our pothole model "
+                       f"(highest confidence {round(perception['pothole_confidence'] * 100)}%).")
+            out.append(f"The largest covers about {perception['largest_pothole_pct']}% of the photo.")
+        else:
+            out.append("Our pothole model did not find a pothole in this photo.")
+    elif perception.get("method") == "texture":
+        out.append(f"Possible pothole, judged from surface texture only ({round(perception['pothole_confidence'] * 100)}%).")
+    if perception.get("crack_percentage", 0) >= 1:
+        out.append(f"Rough or cracked surface covers about {perception['crack_percentage']}% of the photo.")
+    out.append("The photo is blurry: a sharper photo gives a better assessment." if perception.get("is_blurry")
+               else "The photo is sharp enough to assess.")
+    return out
+
+
+def annotate(image_bytes: bytes, detections: List[Dict[str, Any]], max_side: int = 1000) -> Optional[bytes]:
+    """The photo with each detected pothole outlined and labelled, as JPEG (for the citizen's preview and the desk)."""
+    img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    scale = max_side / max(img.shape[:2])
+    if scale < 1:
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    h, w = img.shape[:2]
+    thick = max(2, round(max(h, w) / 300))
+    for i, d in enumerate(detections, 1):
+        x0, y0, x1, y1 = (int(v * s) for v, s in zip(d["box"], (w, h, w, h)))
+        cv2.rectangle(img, (x0, y0), (x1, y1), (51, 153, 255), thick)  # saffron, BGR
+        label = f"Pothole {i}: {round(d['confidence'] * 100)}%"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        ty = max(th + 8, y0)
+        cv2.rectangle(img, (x0, ty - th - 8), (x0 + tw + 8, ty), (51, 153, 255), -1)
+        cv2.putText(img, label, (x0 + 4, ty - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (64, 33, 19), 2, cv2.LINE_AA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    return buf.tobytes() if ok else None

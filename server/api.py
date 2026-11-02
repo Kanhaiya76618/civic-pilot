@@ -10,8 +10,10 @@ Unifies:
 - AutoFile Escalation (Part 2 -> Part 3 bridge)
 """
 
+import base64
 import logging
 import os
+import secrets
 import uuid
 from collections import Counter
 from datetime import datetime, timezone, timedelta
@@ -29,7 +31,9 @@ from server.auth import (
 )
 from fastapi.responses import Response
 from server.storage import upload_evidence, validate_file, StorageValidationError, storage_path_of, read_evidence
-from server.triage import compute_triage_decision
+from server.triage import (
+    SEVERITY_NAMES, annotate, assess_image, compute_triage_decision, department_for, findings, haversine_distance_m
+)
 from server.receipts import sign_receipt, verify_receipt
 from contracts.models import (
     UserRead, TokenResponse, LoginRequest, SignupRequest, CivicReportRead,
@@ -38,7 +42,7 @@ from contracts.models import (
     CivicGuideRequest, CivicGuideResponse
 )
 from server.civic_guide import CivicGuide, GuideUnavailable
-from server.language import TranslationUnavailable, english_version, needs_english
+from server.language import TranslationUnavailable, english_version, in_language, needs_english, transcribe as transcribe_voice
 from server.privacy import UnreadableImage, blur_faces
 
 log = logging.getLogger(__name__)
@@ -128,10 +132,51 @@ def _legacy_demo_login(db: Session, email: str) -> JSONResponse:
         db.refresh(user)
     return _app_token_response(user)
 
+def _officer_signup(req: SignupRequest, email: str, db: Session) -> JSONResponse:
+    """A municipal officer account, only with the access code the authority hands out (CIVIC_OFFICER_SIGNUP_CODE).
+    The officer role is app metadata set with the server key; a user can never give it to themselves."""
+    expected = os.getenv("CIVIC_OFFICER_SIGNUP_CODE", "")
+    if not expected or not secrets.compare_digest((req.officer_code or "").strip().encode(), expected.encode()):
+        raise HTTPException(status_code=403, detail="That municipal access code is not valid. Ask your municipal administrator for one.")
+    url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SECRET_KEY")
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Municipal sign-up needs the Supabase server key on this server.")
+    from supabase import create_client
+    try:
+        create_client(url, key).auth.admin.create_user({
+            "email": email, "password": req.password, "email_confirm": True,
+            "user_metadata": {"name": req.name.strip()}, "app_metadata": {"civic_role": "admin"},
+        })
+    except Exception as exc:
+        already = "already" in str(exc).lower() or "registered" in str(exc).lower()
+        raise HTTPException(status_code=400, detail="An account already exists for this email. Please sign in." if already
+                            else "Could not create the municipal account. Please try again.") from exc
+    return _app_token_response(_sync_authenticated_user(db, email, req.name.strip(), "admin"))
+
+
+# One-click demo accounts for hackathon judges (created by scripts/create_demo_accounts.py).
+JUDGE_DEMO = {"admin": ("officer.demo@example.org", "Demo Officer (Municipal desk)"),
+              "citizen": ("citizen.demo@example.org", "Demo Citizen")}
+
+
+@router.post("/api/v1/auth/judge-demo/{role}")
+def judge_demo_login(role: str, db: Session = Depends(get_db)):
+    """Sign straight into a demo account. Only while CIVIC_JUDGE_DEMO=1: switch it off after judging, because while it
+    is on anyone on the internet can act as the demo officer."""
+    if os.environ.get("CIVIC_JUDGE_DEMO") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    if role not in JUDGE_DEMO:
+        raise HTTPException(status_code=404, detail="Not found")
+    email, name = JUDGE_DEMO[role]
+    return _app_token_response(_sync_authenticated_user(db, email, name, role))
+
+
 @router.post("/api/v1/auth/signup")
 def signup(req: SignupRequest, db: Session = Depends(get_db)):
-    """Create a citizen identity in Supabase Auth. Municipal roles are provisioned, never self-selected."""
+    """Create a citizen identity in Supabase Auth. Municipal roles need the authority's access code."""
     email = req.email.strip().lower()
+    if req.officer_code is not None:
+        return _officer_signup(req, email, db)
     client = _supabase_auth_client()
     redirect_to = f"{os.getenv('CIVIC_PUBLIC_URL', 'http://localhost:5173').rstrip('/')}/signin?confirmed=1"
     try:
@@ -211,6 +256,75 @@ async def civic_guide_chat(
 # 2. CITIZEN GRIEVANCE INTAKE & PERCEPTION TRIAGE (Part 2)
 # ==============================================================================
 
+def ticket_code(report_id) -> str:
+    """The short number a citizen and an officer read out to each other (the report's id, shortened)."""
+    return "CIV-" + str(report_id).replace("-", "")[:8].upper()
+
+
+@router.post("/api/v1/reports/transcribe")
+async def transcribe_voice_note(audio: UploadFile = File(...), user: User = Depends(require_role(["citizen"]))):
+    """A voice note as text, in the language and script it was spoken in, for the citizen to check and correct.
+    Nothing is stored here; the voice note itself is attached when the report is filed."""
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The voice note is empty.")
+    heard = await transcribe_voice(data, audio.content_type or "audio/webm", audio.filename or "voice-note.webm")
+    if not heard["text"]:
+        raise HTTPException(status_code=422, detail="No speech was heard. Please record again, a little closer to the phone.")
+    return heard
+
+
+async def _read_photo(photo: Optional[UploadFile]) -> Optional[bytes]:
+    data = await photo.read() if photo else None
+    if not data:
+        return None
+    try:
+        validate_file(data, photo.filename or "photo.jpg", photo.content_type or "image/jpeg")
+    except StorageValidationError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    return data
+
+
+@router.post("/api/v1/reports/preview")
+async def preview_report(
+    category: str = Form("Other"),
+    description: str = Form(""),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    district: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
+    photo: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(["citizen"]))
+):
+    """What the checks see before anything is filed. Nothing is saved: the ticket is created only on submit."""
+    photo_bytes = await _read_photo(photo)
+    perception = assess_image(photo_bytes) if photo_bytes else {}
+    marked = annotate(photo_bytes, perception.get("detections", [])) if photo_bytes else None
+    out: Dict[str, Any] = {
+        "perception": perception,
+        "findings": findings(perception),
+        "annotated_photo": f"data:image/jpeg;base64,{base64.b64encode(marked).decode()}" if marked else None,
+        "department": department_for(category),
+    }
+    if latitude is not None and longitude is not None:
+        t = compute_triage_decision(category, description, latitude, longitude, db=db, district=district, perception=perception)
+        dup = _report_or_404(db, t["duplicate_of"]) if t["duplicate_of"] else None
+        out.update({
+            "severity": t["severity"], "severity_name": SEVERITY_NAMES.get(t["severity"], t["severity"]),
+            "reasons": t["reasons"], "sla_hours": t["sla_hours"], "department": t["department"],
+            "ward_name": t["assigned_ward_name"], "ward_id": t["assigned_ward_id"], "city": t["city"],
+            "nearest_poi": t["nearest_poi"], "nearest_poi_distance_m": t["nearest_poi_distance_m"],
+            "nearby_report": {"ticket": ticket_code(dup.id), "status": dup.status,
+                              "distance_m": round(haversine_distance_m(latitude, longitude, dup.latitude, dup.longitude))} if dup else None,
+        })
+    lines = out["findings"] + out.get("reasons", [])
+    translated = await in_language(lines, language)
+    if translated:
+        out["findings_local"], out["reasons_local"] = translated[:len(out["findings"])], translated[len(out["findings"]):]
+    return out
+
+
 @router.post("/api/reports")
 @router.post("/api/v1/reports")
 @router.post("/app/part2/api/reports")
@@ -222,6 +336,11 @@ async def create_and_triage_report(
     longitude: float = Form(...),
     photo: Optional[UploadFile] = File(None),
     voice: Optional[UploadFile] = File(None),
+    district: Optional[str] = Form(None),
+    state: Optional[str] = Form(None),
+    pincode: Optional[str] = Form(None),
+    transcript: Optional[str] = Form(None),
+    language: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(["citizen"]))
 ):
@@ -277,8 +396,10 @@ async def create_and_triage_report(
         lat=latitude,
         lng=longitude,
         image_bytes=photo_bytes,
-        db=db
+        db=db,
+        district=district,
     )
+    transcript = (transcript or "").strip()[:4000] or None
 
     user_id = user.id if user else None
     now = datetime.now(timezone.utc)
@@ -319,7 +440,8 @@ async def create_and_triage_report(
         id=str(uuid.uuid4()),
         report_id=report_id,
         event_type="CREATED",
-        payload={"category": category, "description": description},
+        payload={"category": category, "description": description, "transcript": transcript, "language": language,
+                 "district": district, "state": state, "pincode": pincode},
     actor_role=user.role,
         actor_id=user_id,
         created_at=now
@@ -332,7 +454,10 @@ async def create_and_triage_report(
             "severity": triage["severity"],
             "ward_name": triage["assigned_ward_name"],
             "poi": triage.get("nearest_poi"),
-            "duplicate_of": dup_id
+            "duplicate_of": dup_id,
+            "department": triage["department"],
+            "reasons": triage["reasons"],
+            "perception": triage.get("perception") or {},
         },
         actor_role="system",
         created_at=now
@@ -343,11 +468,17 @@ async def create_and_triage_report(
 
     # Written in an Indian language, or spoken: the desk gets an English version (the original stays). Runs after the
     # response, so filing is never slowed down or blocked by the translation service.
-    translating = bool(voice_bytes or needs_english(description))
+    translating = bool(voice_bytes or transcript or needs_english(description))
     if translating:
-        background.add_task(_translate_later, report_id, description, voice_bytes, voice_media)
+        background.add_task(_translate_later, report_id, description, voice_bytes, voice_media, transcript)
 
     return {
+        "ticket": ticket_code(report.id),
+        "department": triage["department"],
+        "severity_name": SEVERITY_NAMES.get(report.severity, report.severity),
+        "sla_hours": triage["sla_hours"],
+        "reasons": triage["reasons"],
+        "findings": findings(triage.get("perception") or {}),
         "translating": translating,
         "code": report.id,
         "id": report.id,
@@ -374,10 +505,11 @@ async def upvote_report(id: str, db: Session = Depends(get_db)):
     return {"ok": True, "upvotes": report.upvotes}
 
 
-async def _translate_later(report_id: str, text: str, voice: bytes | None, media_type: str | None) -> None:
+async def _translate_later(report_id: str, text: str, voice: bytes | None, media_type: str | None,
+                           transcript: str | None = None) -> None:
     """Background: store the English version of a report as a TRANSLATED event. Never raises; the desk can retry."""
     try:
-        result = await english_version(text, voice, media_type or "audio/webm")
+        result = await english_version(text, voice, media_type or "audio/webm", transcript=transcript)
     except Exception as exc:  # the report is filed already; a failed translation only means the desk presses Translate
         log.warning("translation of report %s failed: %s", report_id, exc)
         return
@@ -395,13 +527,14 @@ def _store_translation(report_id: str, result: dict) -> None:
         db.close()
 
 
-def _latest(db: Session, report_ids: list[str], types: tuple[str, ...]) -> dict[str, ReportEvent]:
+def _latest(db: Session, report_ids: list[str], types: tuple[str, ...], actor_role: str | None = None) -> dict[str, ReportEvent]:
     """The most recent event of the given types for each report (one query)."""
     if not report_ids:
         return {}
-    rows = (db.query(ReportEvent).filter(ReportEvent.report_id.in_(report_ids), ReportEvent.event_type.in_(types))
-            .order_by(ReportEvent.created_at.asc()).all())
-    return {e.report_id: e for e in rows}
+    q = db.query(ReportEvent).filter(ReportEvent.report_id.in_(report_ids), ReportEvent.event_type.in_(types))
+    if actor_role:
+        q = q.filter(ReportEvent.actor_role == actor_role)
+    return {e.report_id: e for e in q.order_by(ReportEvent.created_at.asc()).all()}
 
 
 # A citizen's word on a repair: the last of these events decides. A new RESOLVED (after a dispute) asks them again.
@@ -436,6 +569,8 @@ async def my_reports(db: Session = Depends(get_db), user: User = Depends(require
     verdicts, english = citizen_verdicts(db, ids), translations(db, ids)
     return [{
         "id": r.id,
+        "ticket": ticket_code(r.id),
+        "department": department_for(r.category),
         "category": r.category,
         "description": r.description,
         "status": r.status,
@@ -510,6 +645,7 @@ async def get_public_reports(db: Session = Depends(get_db)):
     for r in reports:
         is_breached = bool(r.sla_deadline and r.sla_deadline < now and r.status != "RESOLVED")
         formatted.append({
+            "ticket": ticket_code(r.id),
             "code": str(r.id),
             "id": str(r.id),
             "lat": r.latitude,
@@ -616,8 +752,12 @@ async def get_admin_queue(
     ids = [r.id for r in reports]
     verdicts, english = citizen_verdicts(db, ids), translations(db, ids)
     disputes = {rid: e.payload for rid, e in _latest(db, ids, ("DISPUTED",)).items()}
+    created = {rid: e.payload or {} for rid, e in _latest(db, ids, ("CREATED",)).items()}
+    checked = {rid: e.payload or {} for rid, e in _latest(db, ids, ("TRIAGED",), actor_role="system").items()}
     queue = []
     for r in reports:
+        seen = checked.get(r.id, {}).get("perception") or {}
+        files = list(zip(r.evidence_urls or [], range(len(r.evidence_urls or []))))
         is_breached = bool(r.sla_deadline and r.sla_deadline < now and r.status != "RESOLVED")
         queue.append({
             "id": str(r.id),
@@ -640,9 +780,19 @@ async def get_admin_queue(
             "resolution_proof_url": proof_link(r),
             "resolution_notes": r.resolution_notes,
             "translation": english.get(r.id),
-            "needs_translation": r.id not in english and (needs_english(r.description or "") or _voice_ref(r) is not None),
+            "needs_translation": r.id not in english and (needs_english(r.description or "") or _voice_ref(r) is not None
+                                                          or bool(created.get(r.id, {}).get("transcript"))),
             "citizen_verdict": verdicts.get(r.id),
             "last_dispute": disputes.get(r.id, {}).get("reason") if verdicts.get(r.id) == "disputed" or r.id in disputes else None,
+            "ticket": ticket_code(r.id),
+            "department": checked.get(r.id, {}).get("department") or department_for(r.category),
+            "findings": findings(seen),
+            "reasons": checked.get(r.id, {}).get("reasons") or [],
+            "detections": seen.get("detections") or [],
+            "photo_urls": [f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and not str(ref).lower().endswith(AUDIO_EXTS)],
+            "voice_url": next((f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and str(ref).lower().endswith(AUDIO_EXTS)), None),
+            "transcript": created.get(r.id, {}).get("transcript"),
+            "place": ", ".join(x for x in (created.get(r.id, {}).get("district"), created.get(r.id, {}).get("state"), created.get(r.id, {}).get("pincode")) if x) or None,
             "created_at": r.created_at.isoformat()
         })
     return queue
@@ -665,8 +815,9 @@ async def admin_translate_report(id: str, db: Session = Depends(get_db), admin_u
         got = read_evidence(storage_path_of(ref))
         if got:
             voice, media = got
+    said = (_latest(db, [report.id], ("CREATED",)).get(report.id) or ReportEvent(payload={})).payload or {}
     try:
-        result = await english_version(report.description or "", voice, media or "audio/webm")
+        result = await english_version(report.description or "", voice, media or "audio/webm", transcript=said.get("transcript"))
     except TranslationUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if not result:

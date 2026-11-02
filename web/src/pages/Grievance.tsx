@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, BadgeCheck, Camera, CircleAlert, Crosshair, Languages, LoaderCircle, MapPin, Mic, Route, Sparkles, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Crosshair, Languages, MapPin, Mic, Route, Send, Sparkles, Square, Ticket, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { api, type AppConfig, type Service } from "../api";
+import { api, reportApi, type AppConfig, type FiledReport, type Heard, type ReportPreview, type Service } from "../api";
 import { CategoryArt, type Category } from "../components/Illustrations";
 import { MyReports } from "../components/MyReports";
+import { PhotoFindings, ReviewPanel, SpokenText } from "../components/ReportChecks";
 import { ServiceForm } from "../components/ServiceForm";
 import { LANGS } from "../languages";
 import { Badge, Button, Card, fadeUp, SectionTitle, stagger, useToast } from "../components/ui";
@@ -19,8 +20,6 @@ const CATEGORIES: { id: Category; label: string; hi: string; tint: string }[] = 
   { id: "Other", label: "Something else", hi: "अन्य", tint: "from-navy-50" },
 ];
 
-/** Part 2 contract: POST /api/reports (multipart) -> Triage (see docs/UI_CONTRACT.md). */
-type Triage = { code?: string; severity: "P1" | "P2" | "P3" | string; category?: string; reasoning?: string; duplicate_of?: string | null; translating?: boolean };
 const LANGUAGE_NAMES = LANGS.map((l) => l.label).join(" · ");
 
 /** Rough centre of a PIN code area (OpenStreetMap), for reports filed without "Use my location". */
@@ -32,7 +31,7 @@ async function pinCentre(pin: string): Promise<[number, number] | null> {
   } catch { return null; }
 }
 
-const STEPS = ["Photo & voice", "Location", "Details", "Review & file"];
+const STEPS = ["Photo & voice", "Location", "Details", "Review & submit"];
 const field = "mt-1.5 w-full min-h-11 rounded-xl border border-navy-100 bg-white px-3.5 py-2.5 text-base outline-none focus:border-navy-400 focus:ring-4 focus:ring-navy-100";
 
 function Recenter({ at }: { at: [number, number] }) {
@@ -87,8 +86,15 @@ export default function Grievance() {
   const [locBusy, setLocBusy] = useState(false);
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
-  const [triage, setTriage] = useState<Triage | null>(null);
-  const [triageBusy, setTriageBusy] = useState(false);
+  const [heard, setHeard] = useState<Heard | null>(null);
+  const [transcript, setTranscript] = useState("");
+  const [hearing, setHearing] = useState(false);
+  const [photoCheck, setPhotoCheck] = useState<ReportPreview | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [review, setReview] = useState<ReportPreview | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [filed, setFiled] = useState<FiledReport | null>(null);
+  const [filing, setFiling] = useState(false);
   const flowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -123,26 +129,66 @@ export default function Grievance() {
     }, () => { setLocBusy(false); toast("error", "Location permission was denied. Type your PIN code instead."); }, { enableHighAccuracy: true, timeout: 12000 });
   };
 
-  async function runTriage() {
-    if (!config?.part2_connected || !category || triage) return; // one report per filing, even if the citizen steps back
-    setTriageBusy(true);
-    try {
-      const at = coords ?? await pinCentre(pin);
-      if (!at) throw new Error("Could not place this PIN code on the map. Please use \"Use my current location\".");
-      const fd = new FormData();
-      if (photo) fd.append("photo", photo);
-      if (voice) fd.append("voice", voice, `voice-note.${voice.type.includes("ogg") ? "ogg" : voice.type.includes("mp4") ? "m4a" : "webm"}`);
-      fd.append("category", category); fd.append("description", `${subject.trim()}\n\n${description.trim()}`);
-      fd.append("latitude", String(at[0])); fd.append("longitude", String(at[1]));
-      setTriage(await api.part2("api/reports", { method: "POST", body: fd }));
-    } catch (e) { toast("error", (e as Error).message); }
-    setTriageBusy(false);
-  }
-  useEffect(() => { if (step === 3) runTriage(); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The photo, checked as soon as it is chosen: where the potholes are and what the model sees. Nothing is saved.
+  useEffect(() => {
+    setPhotoCheck(null);
+    if (!photo || !category) return;
+    const fd = new FormData();
+    fd.append("photo", photo); fd.append("category", category);
+    if (heard?.language) fd.append("language", heard.language);
+    setChecking(true);
+    reportApi.preview(fd).then(setPhotoCheck).catch((e) => toast("error", (e as Error).message)).finally(() => setChecking(false));
+  }, [photo, category]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const canNext = [true, !!place, subject.trim().length >= 5 && description.trim().length >= 10, true][step];
+  // The voice note, written down in the language and script it was spoken in, for the citizen to correct.
+  useEffect(() => {
+    setHeard(null); setTranscript("");
+    if (!voice) return;
+    setHearing(true);
+    reportApi.transcribe(voice).then((h) => {
+      setHeard(h); setTranscript(h.text);
+      setDescription((d) => d.trim() ? d : h.text);
+    }).catch((e) => toast("warn", `${(e as Error).message} You can type your report instead.`)).finally(() => setHearing(false));
+  }, [voice]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const where = async () => coords ?? await pinCentre(pin);
+  const reportForm = (at: [number, number]) => {
+    const fd = new FormData();
+    fd.append("category", category!); fd.append("description", `${subject.trim()}\n\n${description.trim()}`);
+    fd.append("latitude", String(at[0])); fd.append("longitude", String(at[1]));
+    if (place) { fd.append("district", place.district); fd.append("state", place.state); }
+    if (pin) fd.append("pincode", pin);
+    if (heard?.language) fd.append("language", heard.language);
+    if (photo) fd.append("photo", photo);
+    return fd;
+  };
+
+  // Review: department, ward, urgency and deadline, worked out before anything is filed.
+  useEffect(() => {
+    if (step !== 3 || filed || !category) return;
+    setReviewBusy(true);
+    where().then((at) => {
+      if (!at) throw new Error("Could not place this PIN code on the map. Please use \"Use my current location\".");
+      return reportApi.preview(reportForm(at));
+    }).then(setReview).catch((e) => toast("error", (e as Error).message)).finally(() => setReviewBusy(false));
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function submit() {
+    if (filing || filed) return;
+    setFiling(true);
+    try {
+      const at = await where();
+      if (!at) throw new Error("Could not place this PIN code on the map. Please use \"Use my current location\".");
+      const fd = reportForm(at);
+      if (voice) fd.append("voice", voice, `voice-note.${voice.type.includes("ogg") ? "ogg" : voice.type.includes("mp4") ? "m4a" : "webm"}`);
+      if (transcript.trim()) fd.append("transcript", transcript.trim());
+      setFiled(await reportApi.file(fd));
+    } catch (e) { toast("error", (e as Error).message); }
+    setFiling(false);
+  }
+
+  const canNext = [!checking && !hearing, !!place, subject.trim().length >= 5 && description.trim().length >= 10, true][step];
   const photoUrl = photo ? URL.createObjectURL(photo) : null;
-  const sev = triage?.severity === "P1" ? { label: "Critical", tone: "red" as const } : triage?.severity === "P2" ? { label: "High", tone: "saffron" as const } : { label: "Medium", tone: "leaf" as const };
   const routing = (category && service?.derive?.category?.[category]) || { ministry: "", department: "" };
 
   return (
@@ -151,12 +197,12 @@ export default function Grievance() {
         <motion.div initial="hidden" animate="show" variants={stagger}>
           <motion.div variants={fadeUp}><Badge tone="saffron">Part 2 · Grievance & triage</Badge></motion.div>
           <motion.h1 variants={fadeUp} className="mt-4 text-4xl font-extrabold leading-tight text-navy-900 sm:text-5xl">Report a civic problem. Track it until it's fixed.</motion.h1>
-          <motion.p variants={fadeUp} className="mt-4 max-w-xl text-lg text-slate-700">Take a photo, say what's wrong, and we find the right department. Our agent files it on the grievance portal with your approval, and the reference number goes on the public board.</motion.p>
+          <motion.p variants={fadeUp} className="mt-4 max-w-xl text-lg text-slate-700">Take a photo and say what's wrong in your own language. Our pothole check marks what it sees, your report becomes a ticket on the municipal desk, and the public board tracks it until it's fixed.</motion.p>
         </motion.div>
         <Card variant="clay" className="overflow-hidden bg-white p-2"><img src="/images/civic-reporting-guide-3d.webp" alt="A citizen photographs a pothole while municipal workers repair the road" className="aspect-[4/3] w-full rounded-[1.35rem] object-cover" /></Card>
       </section>
 
-      <MyReports refreshKey={triage ? 1 : 0} />
+      <MyReports refreshKey={filed ? 1 : 0} />
 
       <section className="mx-auto max-w-7xl px-4 py-8" aria-labelledby="cat">
         <h2 id="cat" className="mb-5 text-2xl font-extrabold text-navy-900">What is the problem about?</h2>
@@ -190,7 +236,7 @@ export default function Grievance() {
                   {step === 0 && (
                     <div className="grid gap-5 sm:grid-cols-2">
                       <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-2 border-dashed border-navy-200 bg-white text-center hover:border-saffron-400">
-                        {photoUrl ? <img src={photoUrl} alt="Your photo of the problem" className="h-full max-h-72 w-full object-cover" /> : (
+                        {photoUrl ? <img src={photoCheck?.annotated_photo ?? photoUrl} alt={photoCheck?.perception.pothole_count ? "Your photo, with the potholes our model found outlined" : "Your photo of the problem"} className="h-full max-h-72 w-full object-contain" /> : (
                           <><span className="grid size-16 place-items-center rounded-2xl bg-saffron-100 text-saffron-700"><Camera className="size-8" /></span>
                             <span className="font-bold text-navy-900">Take or choose a photo</span><span className="text-sm text-slate-500">Optional, but it helps. Resized automatically.</span></>
                         )}
@@ -198,7 +244,9 @@ export default function Grievance() {
                       </label>
                       <div className="space-y-4">
                         <VoiceNote value={voice} onChange={setVoice} />
-                        <p className="rounded-2xl bg-navy-50 p-4 text-sm text-navy-800">Your photo and voice note go to the triage service, which estimates how urgent this is. The photo is also attached to the filing.</p>
+                        <SpokenText heard={heard} busy={hearing} value={transcript} onChange={setTranscript} />
+                        <PhotoFindings data={photoCheck} busy={checking} />
+                        {!photo && !voice && <p className="rounded-2xl bg-navy-50 p-4 text-sm text-navy-800">Add a photo and our pothole model marks what it finds. Speak in your own language and we write it down for you to check.</p>}
                       </div>
                     </div>
                   )}
@@ -253,43 +301,47 @@ export default function Grievance() {
                       </div>
                       <div className="flex items-start gap-3 rounded-2xl bg-saffron-50 p-4 ring-1 ring-saffron-200">
                         <Route className="mt-0.5 size-5 shrink-0 text-saffron-700" />
-                        <p className="text-sm text-navy-900">Will be sent to <b>{routing.ministry}</b> · {routing.department}</p>
+                        <p className="text-sm text-navy-900">Goes to your <b>municipal desk</b> as a ticket. You can then also have the agent file it with <b>{routing.ministry}</b> · {routing.department}.</p>
                       </div>
                     </div>
                   )}
 
-                  {step === 3 && service && (
+                  {step === 3 && (
                     <div className="space-y-6">
-                      {config?.part2_connected ? (
-                        <div className="relative overflow-hidden rounded-2xl bg-white p-5 ring-1 ring-navy-100">
-                          {triageBusy && <div className="shimmer absolute inset-0" />}
-                          <p className="flex items-center gap-2 text-sm font-bold text-navy-700"><Sparkles className="size-4 text-violet-600" />AI triage</p>
-                          {triageBusy ? <p className="mt-2 flex items-center gap-2 text-slate-600"><LoaderCircle className="size-4 animate-spin" />Analysing your photo and description…</p> : triage && (
-                            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-2 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2"><Badge tone={sev.tone}>Severity: {sev.label}</Badge>{triage.code && <Badge tone="gray">{triage.code}</Badge>}</div>
-                              {triage.reasoning && <p className="text-slate-700">{triage.reasoning}</p>}
-                              {triage.duplicate_of && <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700"><CircleAlert className="size-4" />Possible duplicate of {triage.duplicate_of}</p>}
-                              {triage.translating && <p className="flex items-center gap-1.5 text-sm text-navy-800"><Languages className="size-4" />The municipal desk will also see an English translation{voice ? " of your words and voice note" : ""}.</p>}
-                            </motion.div>
-                          )}
-                        </div>
+                      {filed ? (
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="rounded-2xl bg-leaf-50 p-5 ring-1 ring-leaf-200">
+                          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-leaf-700"><Ticket className="size-4" />Ticket created</p>
+                          <p className="mt-1 font-mono text-3xl font-extrabold text-navy-900">{filed.ticket}</p>
+                          <p className="mt-2 text-navy-900">Sent to the municipal desk: <b>{filed.department}</b>, {filed.ward_name === "Ward not mapped yet" ? filed.city : `${filed.ward_name}, ${filed.city}`}. Urgency <b>{filed.severity_name}</b>, due within {filed.sla_hours} hours.</p>
+                          {filed.translating && <p className="mt-1 flex items-center gap-1.5 text-sm text-navy-800"><Languages className="size-4" />The officer also gets an English translation of your words.</p>}
+                          <p className="mt-2 text-sm text-slate-600">Follow it in "Your reports" at the top of this page. When the municipality marks it fixed, you confirm whether it really is.</p>
+                        </motion.div>
                       ) : (
-                        <p className="flex items-start gap-2 rounded-2xl bg-navy-50 p-4 text-sm text-navy-800"><Sparkles className="mt-0.5 size-4 shrink-0" />AI triage (Part 2) is not connected yet, so there is no severity estimate. You can still file now.</p>
+                        <>
+                          {config?.part2_connected && <ReviewPanel data={review} busy={reviewBusy} />}
+                          <dl className="grid gap-x-6 gap-y-2 rounded-2xl bg-white p-4 text-sm ring-1 ring-navy-100 sm:grid-cols-2">
+                            {[["Category", category], ["Place", `${place?.district}, ${place?.state} ${pin}`], ["Title", subject], ["Photo", photo ? photo.name : "none"], ["Voice note", voice ? (heard?.language_name ?? "attached") : "none"]].map(([k, v]) => (
+                              <div key={k}><dt className="text-slate-500">{k}</dt><dd className="break-words font-semibold text-slate-900">{v}</dd></div>
+                            ))}
+                          </dl>
+                          <Button variant="saffron" className="w-full" loading={filing} onClick={submit}><Send className="size-4" />Submit to the municipal desk</Button>
+                          <p className="-mt-3 text-center text-xs text-slate-500">Creates a ticket the municipal desk sees straight away. Your photo and voice note are seen only by municipal officers.</p>
+                        </>
                       )}
-                      <dl className="grid gap-x-6 gap-y-2 rounded-2xl bg-white p-4 text-sm ring-1 ring-navy-100 sm:grid-cols-2">
-                        {[["Category", category], ["Place", `${place?.district}, ${place?.state} ${pin}`], ["Title", subject], ["Photo", photo ? photo.name : "none"]].map(([k, v]) => (
-                          <div key={k}><dt className="text-slate-500">{k}</dt><dd className="font-semibold text-slate-900">{v}</dd></div>
-                        ))}
-                      </dl>
-                      <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">Filed on the <b>sandbox replica</b> of a CPGRAMS-style portal: real filings to ministries are never used for testing.</div>
-                      <ServiceForm
-                        service={service}
-                        prefill={{ ministry: routing.ministry, department: routing.department, category, state: place?.state ?? "", district: place?.district ?? "", pincode: pin, subject, description, ...(coords ? { latitude: coords[0].toFixed(6), longitude: coords[1].toFixed(6) } : {}) }}
-                        hide={["ministry", "department", "category", "state", "district", "subject", "description", "latitude", "longitude", "pincode"]}
-                        extraFiles={photo ? [{ key: "attachment", file: photo }] : []}
-                        submitLabel="File it with the agent"
-                        compact
-                      />
+                      {filed && service && (
+                        <div className="space-y-3 border-t border-navy-100 pt-5">
+                          <p className="flex items-center gap-2 font-bold text-navy-900"><Sparkles className="size-4 text-violet-600" />Also file it on the grievance portal, with the agent (optional)</p>
+                          <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">Filed on the <b>sandbox replica</b> of a CPGRAMS-style portal: real filings to ministries are never used for testing.</div>
+                          <ServiceForm
+                            service={service}
+                            prefill={{ ministry: routing.ministry, department: routing.department, category, state: place?.state ?? "", district: place?.district ?? "", pincode: pin, subject, description: `${description}\n\nMunicipal ticket: ${filed.ticket}`, ...(coords ? { latitude: coords[0].toFixed(6), longitude: coords[1].toFixed(6) } : {}) }}
+                            hide={["ministry", "department", "category", "state", "district", "subject", "description", "latitude", "longitude", "pincode"]}
+                            extraFiles={photo ? [{ key: "attachment", file: photo }] : []}
+                            submitLabel="File it with the agent"
+                            compact
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </motion.div>
@@ -301,7 +353,7 @@ export default function Grievance() {
                   <Button variant="saffron" disabled={!canNext} onClick={() => setStep(step + 1)}>Continue<ArrowRight className="size-4" /></Button>
                 </div>
               )}
-              {step === 3 && <Button variant="ghost" className="mt-4" onClick={() => setStep(2)}><ArrowLeft className="size-4" />Back</Button>}
+              {step === 3 && !filed && <Button variant="ghost" className="mt-4" onClick={() => setStep(2)}><ArrowLeft className="size-4" />Back</Button>}
             </Card>
           </motion.section>
         )}
