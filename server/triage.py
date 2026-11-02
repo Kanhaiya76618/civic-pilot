@@ -118,7 +118,7 @@ def find_duplicate_report(db, lat: float, lng: float, category: str, radius_m: f
     for r in active_reports:
         dist = haversine_distance_m(lat, lng, r.latitude, r.longitude)
         if dist <= radius_m:
-            return r.id
+            return str(r.id)  # PostgreSQL hands back a UUID object; payloads and lookups need text
     return None
 
 

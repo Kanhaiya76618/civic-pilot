@@ -352,3 +352,20 @@ def test_a_voice_note_storage_refuses_does_not_block_the_report(client, monkeypa
     monkeypatch.setattr(api, "upload_evidence", picky)
     filed = file_report(client, citizen_headers(), "Pothole near the school gate", voice=b"\x1aE\xdf\xa3 webm")
     assert filed["ticket"].startswith("CIV-")
+
+
+def test_ids_from_postgres_are_text_in_payloads_and_lookups(client, monkeypatch, fake_translator):
+    """PostgreSQL returns UUID objects for ids; SQLite returns text. Both must work."""
+    import uuid as _uuid
+
+    import server.triage as triage
+    me = citizen_headers()
+    first = file_report(client, me)
+    real = triage.find_duplicate_report
+    monkeypatch.setattr(triage, "find_duplicate_report", lambda *a, **k: str(real(*a, **k)) if real(*a, **k) else None)
+    assert api._report_or_404(next(api.get_db()), _uuid.UUID(first["id"])).id == first["id"]
+    lat, lng = 18.5065, 73.829
+    for _ in range(2):  # the second report sits on the first: a duplicate whose id goes into the event payload
+        r = client.post("/api/v1/reports", headers=me, data={"category": "streetlights", "description": "Same lamp off",
+                                                             "latitude": lat, "longitude": lng})
+        assert r.status_code == 200, r.text

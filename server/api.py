@@ -944,6 +944,7 @@ def evidence_links(r) -> list[str]:
 
 
 def _report_or_404(db: Session, report_id: str):
+    report_id = str(report_id)
     try:
         uuid.UUID(report_id)  # anything else would crash the database query
     except ValueError:
