@@ -41,6 +41,8 @@ type AdminReport = {
   detections: { box: [number, number, number, number]; confidence: number }[];
   photo_urls: string[];
   voice_url: string | null;
+  video_url: string | null;
+  video_check: { frames_checked: number | null; frames_with_potholes: number | null } | null;
   transcript: string | null;
   place: string | null;
   created_at: string;
@@ -473,7 +475,7 @@ export default function AdminDesk() {
                 )}
 
                 {/* The citizen's evidence and what the checks found: officers only */}
-                {(r.photo_urls.length > 0 || r.voice_url || r.findings.length > 0) && (
+                {(r.photo_urls.length > 0 || r.voice_url || r.video_url || r.findings.length > 0) && (
                   <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
                     {r.photo_urls.length > 0 && (
                       <a href={r.photo_urls[0]} target="_blank" rel="noreferrer" className="relative block self-start overflow-hidden rounded-xl ring-1 ring-navy-100">
@@ -495,6 +497,8 @@ export default function AdminDesk() {
                       )}
                       {r.reasons.length > 0 && <p className="text-xs text-slate-600"><b>Why {r.severity}:</b> {r.reasons.join(" ")}</p>}
                       {r.voice_url && <audio src={r.voice_url} controls preload="none" className="h-9 w-full max-w-sm" />}
+                      {r.video_url && <video src={r.video_url} controls preload="metadata" className="w-full max-w-sm rounded-lg ring-1 ring-navy-100" />}
+                      {r.video_check && <p className="text-xs text-slate-600"><b>Video:</b> pothole seen in {r.video_check.frames_with_potholes} of {r.video_check.frames_checked} frames (our YOLOv8 model).</p>}
                       {r.transcript && !r.translation?.transcript && <p className="text-xs text-slate-600" dir="auto"><b>Voice note said:</b> {r.transcript}</p>}
                     </div>
                   </div>

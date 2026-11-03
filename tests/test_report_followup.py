@@ -406,3 +406,30 @@ def test_photo_check_without_the_vision_model_still_works(client):
     out = client.post("/api/v1/reports/preview", headers=citizen_headers(), files={"photo": ("p.png", png(), "image/png")},
                       data={"category": "Water Supply"}).json()
     assert out["category_check"] is None and out["findings"]  # AI off in tests: blur check only, nothing breaks
+
+
+# ------------------------------------------------------------------ pothole videos (our YOLOv8 model only)
+def test_pothole_video_frames_are_checked_by_our_model_and_the_video_reaches_the_desk(client, admin, monkeypatch, fake_translator):
+    called = []
+
+    async def no_external_ai(*a, **k):
+        called.append(1)
+        return None
+
+    monkeypatch.setattr(api, "look_at_photo", no_external_ai)
+    me = citizen_headers()
+    frames = [("frames", (f"f{i}.png", png(), "image/png")) for i in range(3)]
+    vf = client.post("/api/v1/reports/video-frames", headers=me, files=frames).json()
+    assert vf["frames_checked"] == 3 and 0 <= vf["best_index"] < 3
+    assert client.post("/api/v1/reports/video-frames", headers=me, files=[("frames", ("x.exe", b"MZ", "application/x-msdownload"))]).status_code in {400, 415}
+    r = client.post("/api/v1/reports", headers=me,
+                    files={"photo": ("best.png", png(), "image/png"), "video": ("pothole.mp4", b"\x00\x00\x00\x18ftypmp42" + b"\0" * 64, "video/mp4")},
+                    data={"category": "Road and Bridges", "description": "Potholes", "latitude": 15.5, "longitude": 75.0,
+                          "from_video": "true", "video_frames_checked": 3, "video_frames_with_potholes": 2})
+    assert r.status_code == 200, r.text
+    item = queue_item(client, admin, r.json()["id"])
+    assert item["video_url"] and item["photo_urls"] and item["video_check"] == {"frames_checked": 3, "frames_with_potholes": 2}
+    assert called == []  # a video report never calls the external vision model
+    water = client.post("/api/v1/reports", headers=me, files={"video": ("v.mp4", b"\0" * 80, "video/mp4")},
+                        data={"category": "Water Supply", "description": "Leak", "latitude": 15.6, "longitude": 75.1}).json()
+    assert queue_item(client, admin, water["id"])["video_url"] is None  # videos are for pothole reports only

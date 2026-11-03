@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Crosshair, Languages, MapPin, Mic, Route, Send, Sparkles, Square, Ticket, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, Camera, Crosshair, Languages, MapPin, Mic, Route, Send, Sparkles, Square, Ticket, Trash2, Video } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -44,6 +44,30 @@ async function toJpeg(file: File): Promise<File> {
     return blob ? new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
   } catch { return file; } // the browser cannot read it: send as it is and let the server explain
 }
+
+/** Evenly spaced frames from a short video, as JPEGs, for the pothole model (the video itself is attached as well). */
+async function videoFrames(file: File, n = 6): Promise<File[]> {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+  try {
+    await new Promise<void>((ok, bad) => { v.onloadeddata = () => ok(); v.onerror = () => bad(new Error("This video cannot be read here. Please try an MP4 video, or a photo.")); });
+    if (!isFinite(v.duration) || v.duration > 60) throw new Error("Please use a video of up to 60 seconds.");
+    const out: File[] = [];
+    for (let i = 0; i < n; i++) {
+      await new Promise<void>((ok) => { v.onseeked = () => ok(); v.currentTime = (v.duration * (i + 0.5)) / n; });
+      const k = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+      c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
+      const blob = await new Promise<Blob | null>((done) => c.toBlob(done, "image/jpeg", 0.88));
+      if (blob) out.push(new File([blob], `frame-${i + 1}.jpg`, { type: "image/jpeg" }));
+    }
+    if (!out.length) throw new Error("Could not take pictures from this video. Please add a photo instead.");
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+const VIDEO_MAX_MB = 50;
 
 const STEPS = ["Photo & voice", "Location", "Details", "Review & submit"];
 const field = "mt-1.5 w-full min-h-11 rounded-xl border border-navy-100 bg-white px-3.5 py-2.5 text-base outline-none focus:border-navy-400 focus:ring-4 focus:ring-navy-100";
@@ -94,6 +118,9 @@ export default function Grievance() {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<Category | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
+  const [video, setVideo] = useState<File | null>(null);
+  const [videoCheck, setVideoCheck] = useState<{ frames_checked: number; frames_with_potholes: number } | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
   const [voice, setVoice] = useState<Blob | null>(null);
   const [coords, setCoords] = useState<[number, number] | null>(null);
   const [pin, setPin] = useState("");
@@ -150,6 +177,7 @@ export default function Grievance() {
     if (!photo || !category) return;
     const fd = new FormData();
     fd.append("photo", photo); fd.append("category", category);
+    if (videoCheck) fd.append("from_video", "true");
     const shown = heard?.language ?? (lang === "hi" ? "hi-IN" : null);
     if (shown) fd.append("language", shown);
     setChecking(true);
@@ -167,6 +195,26 @@ export default function Grievance() {
     }).catch((e) => toast("warn", `${(e as Error).message} You can type your report instead.`)).finally(() => setHearing(false));
   }, [voice]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isRoad = category === "Road and Bridges";
+  // A video only for road reports: our pothole model checks frames from it, and the clearest frame is the photo.
+  async function chooseMedia(f: File | undefined) {
+    setVideo(null); setVideoCheck(null);
+    if (!f) { setPhoto(null); return; }
+    if (!f.type.startsWith("video/")) { setPhoto(await toJpeg(f)); return; }
+    if (!isRoad) { toast("warn", "Videos are checked for potholes only. Please add a photo for this problem."); return; }
+    setVideoBusy(true);
+    try {
+      const frames = await videoFrames(f);
+      const res = await reportApi.videoFrames(frames);
+      setVideoCheck(res);
+      setPhoto(frames[res.best_index]);
+      if (f.size <= VIDEO_MAX_MB * 1024 * 1024 && /mp4|quicktime/.test(f.type)) setVideo(f);
+      else toast("warn", `The video is checked, but only MP4/MOV videos up to ${VIDEO_MAX_MB} MB are attached for the officer.`);
+    } catch (e) { toast("error", (e as Error).message); }
+    setVideoBusy(false);
+  }
+  useEffect(() => { if (!isRoad && videoCheck) { setVideo(null); setVideoCheck(null); setPhoto(null); } }, [isRoad]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const where = async () => coords ?? await pinCentre(pin);
   const reportForm = (at: [number, number]) => {
     const fd = new FormData();
@@ -177,6 +225,7 @@ export default function Grievance() {
     const shown = heard?.language ?? (lang === "hi" ? "hi-IN" : null);
     if (shown) fd.append("language", shown);
     if (photo) fd.append("photo", photo);
+    if (videoCheck) fd.append("from_video", "true");
     return fd;
   };
 
@@ -199,12 +248,17 @@ export default function Grievance() {
       const fd = reportForm(at);
       if (voice) fd.append("voice", voice, `voice-note.${voice.type.includes("ogg") ? "ogg" : voice.type.includes("mp4") ? "m4a" : "webm"}`);
       if (transcript.trim()) fd.append("transcript", transcript.trim());
+      if (video && videoCheck) {
+        fd.append("video", video, video.name);
+        fd.append("video_frames_checked", String(videoCheck.frames_checked));
+        fd.append("video_frames_with_potholes", String(videoCheck.frames_with_potholes));
+      }
       setFiled(await reportApi.file(fd));
     } catch (e) { toast("error", (e as Error).message); }
     setFiling(false);
   }
 
-  const canNext = [!checking && !hearing, !!place, subject.trim().length >= 5 && description.trim().length >= 10, true][step];
+  const canNext = [!checking && !hearing && !videoBusy, !!place, subject.trim().length >= 5 && description.trim().length >= 10, true][step];
   const photoUrl = photo ? URL.createObjectURL(photo) : null;
   const routing = (category && service?.derive?.category?.[category]) || { ministry: "", department: "" };
 
@@ -255,12 +309,14 @@ export default function Grievance() {
                       <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-2 border-dashed border-navy-200 bg-white text-center hover:border-saffron-400">
                         {photoUrl ? <img src={photoCheck?.annotated_photo ?? photoUrl} alt={photoCheck?.perception.pothole_count ? "Your photo, with the potholes our model found outlined" : "Your photo of the problem"} className="h-full max-h-72 w-full object-contain" /> : (
                           <><span className="grid size-16 place-items-center rounded-2xl bg-saffron-100 text-saffron-700"><Camera className="size-8" /></span>
-                            <span className="font-bold text-navy-900">Take or choose a photo</span><span className="text-sm text-slate-500">Optional, but it helps. Resized automatically.</span></>
+                            <span className="font-bold text-navy-900">{isRoad ? "Take or choose a photo or video" : "Take or choose a photo"}</span><span className="text-sm text-slate-500">{isRoad ? "Optional. A video of up to 60 seconds is checked for potholes." : "Optional, but it helps. Resized automatically."}</span></>
                         )}
-                        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; setPhoto(f ? await toJpeg(f) : null); }} />
+                        <input type="file" accept={isRoad ? "image/*,video/mp4,video/quicktime" : "image/*"} className="sr-only" onChange={(e) => chooseMedia(e.target.files?.[0])} />
                       </label>
                       <div className="space-y-4">
                         <VoiceNote value={voice} onChange={setVoice} />
+                        {videoBusy && <p className="flex items-center gap-2 rounded-2xl bg-white p-4 text-sm text-slate-600 ring-1 ring-navy-100"><Video className="size-4 animate-pulse" />Checking your video for potholes…</p>}
+                        {videoCheck && <p className="flex items-start gap-2 rounded-2xl bg-saffron-50 p-4 text-sm text-navy-900 ring-1 ring-saffron-200"><Video className="mt-0.5 size-4 shrink-0 text-saffron-700" /><span>From your video: our pothole model checked {videoCheck.frames_checked} frames and saw a pothole in {videoCheck.frames_with_potholes}. The clearest frame is shown{video ? ", and the video goes to the officer" : ""}.</span></p>}
                         <SpokenText heard={heard} busy={hearing} value={transcript} onChange={setTranscript} />
                         <PhotoFindings data={photoCheck} busy={checking} labelOf={(c) => CATEGORIES.find((x) => x.id === c)?.label ?? c}
                           onSwitch={(c) => { const hit = CATEGORIES.find((x) => x.id === c); if (hit) setCategory(hit.id); }} />
@@ -338,7 +394,7 @@ export default function Grievance() {
                         <>
                           {config?.part2_connected && <ReviewPanel data={review} busy={reviewBusy} />}
                           <dl className="grid gap-x-6 gap-y-2 rounded-2xl bg-white p-4 text-sm ring-1 ring-navy-100 sm:grid-cols-2">
-                            {[["Category", category], ["Place", `${place?.district}, ${place?.state} ${pin}`], ["Title", subject], ["Photo", photo ? photo.name : "none"], ["Voice note", voice ? (heard?.language_name ?? "attached") : "none"]].map(([k, v]) => (
+                            {[["Category", category], ["Place", `${place?.district}, ${place?.state} ${pin}`], ["Title", subject], ["Photo", video ? `Frame from your video (${video.name})` : photo ? photo.name : "none"], ["Voice note", voice ? (heard?.language_name ?? "attached") : "none"]].map(([k, v]) => (
                               <div key={k}><dt className="text-slate-500">{k}</dt><dd className="break-words font-semibold text-slate-900">{v}</dd></div>
                             ))}
                           </dl>

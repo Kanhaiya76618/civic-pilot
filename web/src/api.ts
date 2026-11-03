@@ -225,6 +225,12 @@ export const reportApi = {
     fd.append("audio", audio, `voice-note.${audio.type.includes("ogg") ? "ogg" : audio.type.includes("mp4") ? "m4a" : "webm"}`);
     return fetch("/api/v1/reports/transcribe", { method: "POST", headers: authHeaders(), body: fd }).then(json<Heard>);
   },
+  videoFrames: (frames: File[]) => {
+    const fd = new FormData();
+    frames.forEach((f) => fd.append("frames", f));
+    return fetch("/api/v1/reports/video-frames", { method: "POST", headers: authHeaders(), body: fd })
+      .then(json<{ frames_checked: number; frames_with_potholes: number; best_index: number; best_confidence: number }>);
+  },
   preview: (fd: FormData) => fetch("/api/v1/reports/preview", { method: "POST", headers: authHeaders(), body: fd }).then(json<ReportPreview>),
   file: (fd: FormData) => fetch("/api/v1/reports", { method: "POST", headers: authHeaders(), body: fd }).then(json<FiledReport>),
 };

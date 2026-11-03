@@ -25,7 +25,12 @@ ALLOWED_MIME_TYPES = {
     "audio/ogg": [".ogg", ".oga"],
     "audio/mpeg": [".mp3"],
     "audio/mp4": [".m4a", ".mp4"],
+    # Pothole videos (phone galleries: MP4 on Android, MOV/MP4 on iPhone). Stored as .mp4/.mov only, so a video is
+    # never mistaken for a .webm voice note.
+    "video/mp4": [".mp4"],
+    "video/quicktime": [".mov"],
 }
+MAX_VIDEO_SIZE = 50 * 1024 * 1024  # the Supabase project limit
 EVIDENCE_PREFIX = "evidence://"  # what the database stores: where the file is, never a public link
 
 # Lazy client initialization
@@ -50,9 +55,10 @@ class StorageValidationError(Exception):
 def validate_file(file_bytes: bytes, filename: str, content_type: str):
     """Enforces MIME whitelist, extension match, and 10MB file size limit."""
     # Size check
-    if len(file_bytes) > MAX_FILE_SIZE:
+    limit = MAX_VIDEO_SIZE if content_type.lower().startswith("video/") else MAX_FILE_SIZE
+    if len(file_bytes) > limit:
         raise StorageValidationError(
-            f"File size {len(file_bytes)} bytes exceeds 10MB limit", 
+            f"File size {len(file_bytes)} bytes exceeds the {limit // (1024 * 1024)} MB limit", 
             status_code=413
         )
 

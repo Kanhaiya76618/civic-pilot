@@ -27,7 +27,7 @@ export function PhotoFindings({ data, busy, labelOf, onSwitch }: { data: ReportP
       <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
         {(local ?? data.findings).map((f, i) => <li key={i} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-saffron-500" />{f}</li>)}
       </ul>
-      <p className="mt-2 text-xs text-slate-500">{local ? "Machine-translated. " : ""}AI photo check{data.perception.method === "yolo" ? " and our pothole model" : ""}; the municipal officer checks it too.</p>
+      <p className="mt-2 text-xs text-slate-500">{local ? "Machine-translated. " : ""}{data.category_check ? `AI photo check${data.perception.method === "yolo" ? " and our pothole model" : ""}` : "Our YOLOv8 pothole model"}; the municipal officer checks it too.</p>
     </div>
   );
 }

@@ -275,12 +275,13 @@ async def transcribe_voice_note(audio: UploadFile = File(...), user: User = Depe
     return heard
 
 
-async def check_photo(photo_bytes: Optional[bytes], category: str) -> dict:
-    """Pothole model for road reports; the vision reading for every category (skipped quietly if unavailable)."""
+async def check_photo(photo_bytes: Optional[bytes], category: str, vision: bool = True) -> dict:
+    """Pothole model for road reports; the vision reading for every category (skipped quietly if unavailable).
+    vision=False (a frame from a pothole video): our own YOLOv8 model only, no external AI."""
     if not photo_bytes:
         return {}
     perception = assess_image(photo_bytes, potholes=category_of(category) == ROADS)
-    seen = await look_at_photo(photo_bytes, category)
+    seen = await look_at_photo(photo_bytes, category) if vision else None
     if seen:
         perception["vision"] = seen
     return perception
@@ -305,6 +306,26 @@ async def _read_photo(photo: Optional[UploadFile]) -> Optional[bytes]:
     return data
 
 
+@router.post("/api/v1/reports/video-frames")
+async def check_video_frames(frames: List[UploadFile] = File(...), user: User = Depends(require_role(["citizen"]))):
+    """Potholes in frames the browser took from a citizen's road video: our YOLOv8 model on each frame (no external
+    AI). The frame with the clearest pothole becomes the report's photo."""
+    if not 1 <= len(frames) <= 12:
+        raise HTTPException(status_code=400, detail="Send between 1 and 12 frames.")
+    seen = []
+    for f in frames:
+        data = await f.read()
+        try:
+            validate_file(data, f.filename or "frame.jpg", f.content_type or "image/jpeg")
+        except StorageValidationError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.message)
+        seen.append(assess_image(data, potholes=True))
+    best = max(range(len(seen)), key=lambda i: (seen[i]["pothole_count"], seen[i]["pothole_confidence"]))
+    hits = sum(1 for p in seen if p["pothole_count"])
+    return {"frames_checked": len(seen), "frames_with_potholes": hits, "best_index": best,
+            "best_confidence": seen[best]["pothole_confidence"], "model": "yolov8-pothole" if seen[best]["method"] == "yolo" else seen[best]["method"]}
+
+
 @router.post("/api/v1/reports/preview")
 async def preview_report(
     category: str = Form("Other"),
@@ -313,13 +334,14 @@ async def preview_report(
     longitude: Optional[float] = Form(None),
     district: Optional[str] = Form(None),
     language: Optional[str] = Form(None),
+    from_video: bool = Form(False),
     photo: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(["citizen"]))
 ):
     """What the checks see before anything is filed. Nothing is saved: the ticket is created only on submit."""
     photo_bytes = await _read_photo(photo)
-    perception = await check_photo(photo_bytes, category)
+    perception = await check_photo(photo_bytes, category, vision=not from_video)
     marked = annotate(photo_bytes, perception.get("detections", [])) if photo_bytes else None
     out: Dict[str, Any] = {
         "perception": perception,
@@ -362,6 +384,9 @@ async def create_and_triage_report(
     pincode: Optional[str] = Form(None),
     transcript: Optional[str] = Form(None),
     language: Optional[str] = Form(None),
+    video: Optional[UploadFile] = File(None),
+    video_frames_checked: Optional[int] = Form(None),
+    video_frames_with_potholes: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(["citizen"]))
 ):
@@ -415,6 +440,19 @@ async def create_and_triage_report(
             except Exception as exc:  # storage refused it (e.g. the bucket does not allow audio): the report still goes
                 log.warning("voice note for report %s not stored: %s", report_id, exc)
 
+    # Pothole video (road reports): kept for the officer. Storage refusing it never blocks the report.
+    from_video = bool(video and category_of(category) == ROADS)
+    if from_video:
+        video_bytes = await video.read()
+        media = (video.content_type or "video/mp4").split(";")[0].strip()
+        ext = ".mov" if media == "video/quicktime" else ".mp4"
+        if video_bytes:
+            try:
+                evidence_urls.append(upload_evidence(file_bytes=video_bytes, filename=f"video{ext}",
+                                                     content_type="video/quicktime" if ext == ".mov" else "video/mp4", report_id=report_id)["ref"])
+            except Exception as exc:
+                log.warning("video for report %s not stored: %s", report_id, exc)
+
     # Run AI Triage Engine
     triage = compute_triage_decision(
         category=category,
@@ -424,7 +462,7 @@ async def create_and_triage_report(
         image_bytes=photo_bytes,
         db=db,
         district=district,
-        perception=await check_photo(photo_bytes, category) if photo_bytes else {},
+        perception=await check_photo(photo_bytes, category, vision=not from_video) if photo_bytes else {},
     )
     transcript = (transcript or "").strip()[:4000] or None
 
@@ -468,7 +506,8 @@ async def create_and_triage_report(
         report_id=report_id,
         event_type="CREATED",
         payload={"category": category, "description": description, "transcript": transcript, "language": language,
-                 "district": district, "state": state, "pincode": pincode},
+                 "district": district, "state": state, "pincode": pincode,
+                 **({"video": {"frames_checked": video_frames_checked, "frames_with_potholes": video_frames_with_potholes}} if from_video else {})},
     actor_role=user.role,
         actor_id=user_id,
         created_at=now
@@ -816,7 +855,9 @@ async def get_admin_queue(
             "findings": findings(seen),
             "reasons": checked.get(r.id, {}).get("reasons") or [],
             "detections": seen.get("detections") or [],
-            "photo_urls": [f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and not str(ref).lower().endswith(AUDIO_EXTS)],
+            "photo_urls": [f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and not str(ref).lower().endswith(AUDIO_EXTS + VIDEO_EXTS)],
+            "video_url": next((f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and str(ref).lower().endswith(VIDEO_EXTS)), None),
+            "video_check": created.get(r.id, {}).get("video"),
             "voice_url": next((f"/api/v1/evidence/{r.id}/{i}" for ref, i in files if storage_path_of(ref) and str(ref).lower().endswith(AUDIO_EXTS)), None),
             "transcript": created.get(r.id, {}).get("transcript"),
             "place": ", ".join(x for x in (created.get(r.id, {}).get("district"), created.get(r.id, {}).get("state"), created.get(r.id, {}).get("pincode")) if x) or None,
@@ -826,6 +867,7 @@ async def get_admin_queue(
 
 
 AUDIO_EXTS = (".webm", ".ogg", ".mp3", ".m4a")
+VIDEO_EXTS = (".mp4", ".mov")
 
 
 def _voice_ref(r) -> str | None:
