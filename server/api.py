@@ -44,6 +44,7 @@ from contracts.models import (
 from server.civic_guide import CivicGuide, GuideUnavailable
 from server.language import TranslationUnavailable, english_version, in_language, needs_english, transcribe as transcribe_voice
 from server.privacy import UnreadableImage, blur_faces
+from server.vision import ROADS, category_of, look as look_at_photo
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -274,6 +275,25 @@ async def transcribe_voice_note(audio: UploadFile = File(...), user: User = Depe
     return heard
 
 
+async def check_photo(photo_bytes: Optional[bytes], category: str) -> dict:
+    """Pothole model for road reports; the vision reading for every category (skipped quietly if unavailable)."""
+    if not photo_bytes:
+        return {}
+    perception = assess_image(photo_bytes, potholes=category_of(category) == ROADS)
+    seen = await look_at_photo(photo_bytes, category)
+    if seen:
+        perception["vision"] = seen
+    return perception
+
+
+def _category_check(perception: dict, category: str) -> Optional[dict]:
+    seen = perception.get("vision")
+    if not seen:
+        return None
+    return {"matches": seen["matches_category"], "likely_category": seen["likely_category"], "chosen": category_of(category),
+            "problem_visible": seen["problem_visible"], "issue": seen["issue"]}
+
+
 async def _read_photo(photo: Optional[UploadFile]) -> Optional[bytes]:
     data = await photo.read() if photo else None
     if not data:
@@ -299,13 +319,14 @@ async def preview_report(
 ):
     """What the checks see before anything is filed. Nothing is saved: the ticket is created only on submit."""
     photo_bytes = await _read_photo(photo)
-    perception = assess_image(photo_bytes) if photo_bytes else {}
+    perception = await check_photo(photo_bytes, category)
     marked = annotate(photo_bytes, perception.get("detections", [])) if photo_bytes else None
     out: Dict[str, Any] = {
         "perception": perception,
         "findings": findings(perception),
         "annotated_photo": f"data:image/jpeg;base64,{base64.b64encode(marked).decode()}" if marked else None,
         "department": department_for(category),
+        "category_check": _category_check(perception, category),
     }
     if latitude is not None and longitude is not None:
         t = compute_triage_decision(category, description, latitude, longitude, db=db, district=district, perception=perception)
@@ -403,6 +424,7 @@ async def create_and_triage_report(
         image_bytes=photo_bytes,
         db=db,
         district=district,
+        perception=await check_photo(photo_bytes, category) if photo_bytes else {},
     )
     transcript = (transcript or "").strip()[:4000] or None
 

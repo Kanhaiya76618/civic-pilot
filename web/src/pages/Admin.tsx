@@ -460,7 +460,7 @@ export default function AdminDesk() {
                 </div>
 
                 {/* Description: the citizen's own words, then the machine translation beside them */}
-                <h3 className="mt-2.5 whitespace-pre-line break-words text-base font-bold text-navy-900">{r.description}</h3>
+                <h3 translate="no" className="mt-2.5 whitespace-pre-line break-words text-base font-bold text-navy-900">{r.description}</h3>
                 {r.translation && r.translation.language !== "en-IN" && (
                   <div className="mt-2 rounded-xl bg-violet-50 p-3 text-sm text-violet-950 ring-1 ring-violet-100">
                     <div className="text-xs font-bold uppercase tracking-wider text-violet-700">English (machine translation from {r.translation.language_name})</div>

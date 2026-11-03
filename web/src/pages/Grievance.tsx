@@ -9,6 +9,7 @@ import { MyReports } from "../components/MyReports";
 import { PhotoFindings, ReviewPanel, SpokenText } from "../components/ReportChecks";
 import { ServiceForm } from "../components/ServiceForm";
 import { LANGS } from "../languages";
+import { useI18n } from "../i18n";
 import { Badge, Button, Card, fadeUp, SectionTitle, stagger, useToast } from "../components/ui";
 
 const CATEGORIES: { id: Category; label: string; hi: string; tint: string }[] = [
@@ -29,6 +30,19 @@ async function pinCentre(pin: string): Promise<[number, number] | null> {
     const [hit] = await r.json();
     return hit ? [Number(hit.lat), Number(hit.lon)] : null;
   } catch { return null; }
+}
+
+/** Any photo the phone gives us (WebP, PNG, huge JPEG) as a JPEG of at most 2000 px, which the server accepts. */
+async function toJpeg(file: File): Promise<File> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((done) => c.toBlob(done, "image/jpeg", 0.88));
+    return blob ? new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+  } catch { return file; } // the browser cannot read it: send as it is and let the server explain
 }
 
 const STEPS = ["Photo & voice", "Location", "Details", "Review & submit"];
@@ -74,6 +88,7 @@ function VoiceNote({ value, onChange }: { value: Blob | null; onChange: (b: Blob
 
 export default function Grievance() {
   const toast = useToast();
+  const { lang } = useI18n();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [service, setService] = useState<Service | null>(null);
   const [step, setStep] = useState(0);
@@ -135,10 +150,11 @@ export default function Grievance() {
     if (!photo || !category) return;
     const fd = new FormData();
     fd.append("photo", photo); fd.append("category", category);
-    if (heard?.language) fd.append("language", heard.language);
+    const shown = heard?.language ?? (lang === "hi" ? "hi-IN" : null);
+    if (shown) fd.append("language", shown);
     setChecking(true);
     reportApi.preview(fd).then(setPhotoCheck).catch((e) => toast("error", (e as Error).message)).finally(() => setChecking(false));
-  }, [photo, category]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [photo, category, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The voice note, written down in the language and script it was spoken in, for the citizen to correct.
   useEffect(() => {
@@ -158,7 +174,8 @@ export default function Grievance() {
     fd.append("latitude", String(at[0])); fd.append("longitude", String(at[1]));
     if (place) { fd.append("district", place.district); fd.append("state", place.state); }
     if (pin) fd.append("pincode", pin);
-    if (heard?.language) fd.append("language", heard.language);
+    const shown = heard?.language ?? (lang === "hi" ? "hi-IN" : null);
+    if (shown) fd.append("language", shown);
     if (photo) fd.append("photo", photo);
     return fd;
   };
@@ -240,12 +257,13 @@ export default function Grievance() {
                           <><span className="grid size-16 place-items-center rounded-2xl bg-saffron-100 text-saffron-700"><Camera className="size-8" /></span>
                             <span className="font-bold text-navy-900">Take or choose a photo</span><span className="text-sm text-slate-500">Optional, but it helps. Resized automatically.</span></>
                         )}
-                        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
+                        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; setPhoto(f ? await toJpeg(f) : null); }} />
                       </label>
                       <div className="space-y-4">
                         <VoiceNote value={voice} onChange={setVoice} />
                         <SpokenText heard={heard} busy={hearing} value={transcript} onChange={setTranscript} />
-                        <PhotoFindings data={photoCheck} busy={checking} />
+                        <PhotoFindings data={photoCheck} busy={checking} labelOf={(c) => CATEGORIES.find((x) => x.id === c)?.label ?? c}
+                          onSwitch={(c) => { const hit = CATEGORIES.find((x) => x.id === c); if (hit) setCategory(hit.id); }} />
                         {!photo && !voice && <p className="rounded-2xl bg-navy-50 p-4 text-sm text-navy-800">Add a photo and our pothole model marks what it finds. Speak in your own language and we write it down for you to check.</p>}
                       </div>
                     </div>

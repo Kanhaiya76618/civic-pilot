@@ -168,8 +168,10 @@ def get_nearest_poi(lat: float, lng: float) -> Tuple[Optional[str], Optional[flo
 
 # ----------------- COMPUTER VISION TRIAGE -----------------
 
-def assess_image(image_bytes: bytes) -> Dict[str, Any]:
+def assess_image(image_bytes: bytes, potholes: bool = True) -> Dict[str, Any]:
     """
+    potholes=False (any category but roads): only the blur check runs; the pothole model and the crack texture
+    measure are about road surfaces and would mislabel garbage or a lamp post.
     Analyzes photo using:
     - Laplacian blur detection
     - Black-hat crack morphology
@@ -198,6 +200,8 @@ def assess_image(image_bytes: bytes) -> Dict[str, Any]:
         blur_var = cv2.Laplacian(gray, cv2.CV_64F).var()
         result["blur_score"] = round(float(blur_var), 2)
         result["is_blurry"] = bool(blur_var < 80.0)
+        if not potholes:
+            return result
 
         # 2. Black-Hat Crack Morphology
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
@@ -293,13 +297,19 @@ def compute_triage_decision(
 
     # 5. Severity Rating Computation
     base_severity, reasons = "P3", []
+    seen = perception.get("vision") or {}
+    danger = seen.get("problem_visible") and (seen.get("severity") == "high" or seen.get("hazards"))
     if urgency == "critical" or "burst" in description.lower() or "hospital" in description.lower():
         base_severity = "P1"
         reasons.append("The description mentions an emergency or a danger to people.")
+    elif danger:
+        base_severity = "P2"
+        what = "; ".join(seen.get("hazards") or []) or seen.get("issue") or "a serious problem"
+        reasons.append(f"The photo shows a danger to people: {what[:1].lower() + what[1:]}.")
     elif perception.get("pothole_detected") and perception.get("pothole_confidence", 0) > 0.6:
         base_severity = "P2"
         reasons.append(f"The photo shows a pothole ({round(perception['pothole_confidence'] * 100)}% confidence).")
-    elif perception.get("crack_percentage", 0) > 5.0:
+    elif perception.get("crack_percentage", 0) > 5.0 and seen.get("matches_category", True):
         base_severity = "P2"
         reasons.append(f"Rough or cracked surface covers about {perception['crack_percentage']}% of the photo.")
     elif final_category in ["water", "drainage"] and "overflow" in description.lower():
@@ -364,6 +374,11 @@ def findings(perception: Dict[str, Any]) -> List[str]:
     if not perception:
         return []
     out = []
+    seen = perception.get("vision") or {}
+    if seen.get("shows"):
+        out.append(seen["shows"])
+        out.extend(seen.get("observations") or [])
+        out.extend(f"Danger: {h}" for h in seen.get("hazards") or [])
     if perception.get("method") == "yolo":
         n = perception.get("pothole_count", 0)
         if n:

@@ -48,7 +48,7 @@ def test_public_reports_and_stats(client):
     assert res.status_code == 200
     reports = res.json()
     assert len(reports) >= 18
-    assert any(r["severity"] == "P1" for r in reports)
+    assert all(r["severity"] in {"P1", "P2", "P3", "P4"} for r in reports)  # the newest 100 need not include a P1
 
     # Public stats
     res_stats = client.get("/api/public/stats")

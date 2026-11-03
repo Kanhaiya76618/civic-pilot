@@ -369,3 +369,40 @@ def test_ids_from_postgres_are_text_in_payloads_and_lookups(client, monkeypatch,
         r = client.post("/api/v1/reports", headers=me, data={"category": "streetlights", "description": "Same lamp off",
                                                              "latitude": lat, "longitude": lng})
         assert r.status_code == 200, r.text
+
+
+# ------------------------------------------------------------------ photo checks for every category
+def test_pothole_model_runs_only_for_road_reports():
+    from server.triage import assess_image
+    road, lamp = assess_image(png(), potholes=True), assess_image(png(), potholes=False)
+    assert road["method"] in {"yolo", "texture", None} and "blur_score" in lamp
+    assert lamp["method"] is None and lamp["detections"] == [] and lamp["crack_percentage"] == 0.0
+
+
+def test_vision_reading_flags_the_wrong_category_and_names_the_danger(client, monkeypatch):
+    import server.vision as vision
+    from server.triage import compute_triage_decision, findings
+
+    async def seen(image_bytes, category):
+        return {"shows": "A pile of burning garbage beside a road.", "problem_visible": True, "issue": "burning garbage",
+                "likely_category": "Pollution", "matches_category": vision.fits("Pollution", vision.category_of(category)),
+                "severity": "high", "observations": ["Thick smoke"], "hazards": ["Smoke reaching homes"]}
+
+    monkeypatch.setattr(api, "look_at_photo", seen)
+    me = citizen_headers()
+    out = client.post("/api/v1/reports/preview", headers=me, files={"photo": ("p.png", png(), "image/png")},
+                      data={"category": "Road and Bridges", "latitude": 15.46, "longitude": 75.01}).json()
+    assert out["category_check"]["matches"] is False and out["category_check"]["likely_category"] == "Pollution"
+    assert out["findings"][0] == "A pile of burning garbage beside a road." and "Danger: Smoke reaching homes" in out["findings"]
+    assert out["severity"] == "P2" and "danger to people" in out["reasons"][0]
+    garbage = client.post("/api/v1/reports/preview", headers=me, files={"photo": ("p.png", png(), "image/png")},
+                          data={"category": "Sanitation and Garbage"}).json()
+    assert garbage["category_check"]["matches"] is True  # garbage and pollution overlap: not "the wrong category"
+    assert garbage["perception"]["method"] is None  # no pothole model on a garbage report
+    assert vision.category_of("streetlights") == "Street Lights" and vision.category_of("nonsense") == "Other"
+
+
+def test_photo_check_without_the_vision_model_still_works(client):
+    out = client.post("/api/v1/reports/preview", headers=citizen_headers(), files={"photo": ("p.png", png(), "image/png")},
+                      data={"category": "Water Supply"}).json()
+    assert out["category_check"] is None and out["findings"]  # AI off in tests: blur check only, nothing breaks

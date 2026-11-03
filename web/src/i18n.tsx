@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { HI } from "./hi";
 
 export type Lang = "en" | "hi";
 
@@ -149,8 +150,89 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("cp-scale", JSON.stringify(scale));
     } catch { /* private mode: settings just are not remembered */ }
   }, [lang, scale]);
+  useEffect(() => translatePage(lang), [lang]);
   const t = (k: StringKey) => STRINGS[k][lang];
   return <I18n.Provider value={{ lang, setLang, t, scale, setScale }}>{children}</I18n.Provider>;
+}
+
+// Every other page: in Hindi, swap each interface string that exactly matches the dictionary (and swap it back in
+// English). Text inside translate="no", form fields and code is never touched, so citizens' words stay as written.
+const ATTRS = ["placeholder", "aria-label", "title", "alt"] as const;
+const SKIP = "script,style,textarea,code,pre,[translate=no]";
+// What we replaced, and what we put there: a node is restored only if it still shows our Hindi (React may have
+// re-rendered it since, and then its new text is the right one).
+const textOrig = new WeakMap<Text, { was: string; put: string }>();
+const attrOrig = new WeakMap<Element, Record<string, { was: string; put: string }>>();
+let observer: MutationObserver | null = null;
+
+// Phrases with a number in them ("5 h ago", "Due within 48 h").
+const PATTERNS: [RegExp, (...m: string[]) => string][] = [
+  [/^(\d+) min ago$/, (n) => `${n} मिनट पहले`],
+  [/^(\d+) h ago$/, (n) => `${n} घंटे पहले`],
+  [/^(\d+) d ago$/, (n) => `${n} दिन पहले`],
+  [/^reported (\d+) (min|h|d) ago$/, (n, u) => `${n} ${u === "min" ? "मिनट" : u === "h" ? "घंटे" : "दिन"} पहले दर्ज`],
+];
+function pattern(text: string): string | undefined {
+  for (const [re, fn] of PATTERNS) { const m = text.match(re); if (m) return fn(...m.slice(1)); }
+  return undefined;
+}
+
+function swapText(n: Text, hi: boolean) {
+  if (n.parentElement?.closest(SKIP)) return;
+  const now = n.nodeValue ?? "";
+  if (!hi) {
+    const saved = textOrig.get(n);
+    textOrig.delete(n);
+    if (saved && now === saved.put) n.nodeValue = saved.was;
+    return;
+  }
+  const key = now.trim();
+  const tr = key && (HI[key] ?? pattern(key));
+  if (tr && tr !== key) {  // same text again would loop
+    const put = now.replace(key, tr);
+    textOrig.set(n, { was: now, put });
+    n.nodeValue = put;
+  }
+}
+
+function swapAttrs(el: Element, hi: boolean) {
+  if (el.closest("[translate=no]")) return;
+  const saved = attrOrig.get(el) ?? {};
+  for (const a of ATTRS) {
+    if (!hi) { if (saved[a] && el.getAttribute(a) === saved[a].put) el.setAttribute(a, saved[a].was); continue; }
+    const v = el.getAttribute(a)?.trim();
+    const tr = v && HI[v];
+    if (tr && tr !== v) { saved[a] = { was: el.getAttribute(a)!, put: tr }; el.setAttribute(a, tr); }
+  }
+  if (hi) attrOrig.set(el, saved); else attrOrig.delete(el);
+}
+
+function walk(root: Node, hi: boolean) {
+  if (root.nodeType === Node.TEXT_NODE) return swapText(root as Text, hi);
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  swapAttrs(root as Element, hi);
+  const it = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = it.nextNode(); n; n = it.nextNode()) {
+    if (n.nodeType === Node.TEXT_NODE) swapText(n as Text, hi);
+    else swapAttrs(n as Element, hi);
+  }
+}
+
+function translatePage(lang: Lang) {
+  observer?.disconnect();
+  observer = null;
+  const hi = lang === "hi";
+  walk(document.body, hi);
+  if (!hi) return;
+  // React keeps rendering: translate what it adds or changes (a node already in Hindi matches nothing, so no loop).
+  observer = new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === "characterData") swapText(r.target as Text, true);
+      else if (r.type === "attributes") swapAttrs(r.target as Element, true);
+      else r.addedNodes.forEach((n) => walk(n, true));
+    }
+  });
+  observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...ATTRS] });
 }
 
 export function useI18n() {

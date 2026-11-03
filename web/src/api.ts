@@ -209,7 +209,8 @@ export const myReports = {
 export type ReportPreview = {
   perception: { pothole_detected?: boolean; pothole_count?: number; method?: string | null; is_blurry?: boolean };
   findings: string[]; findings_local?: string[]; reasons?: string[]; reasons_local?: string[];
-  annotated_photo: string | null; department: string; severity?: string; severity_name?: string; sla_hours?: number;
+  annotated_photo: string | null; department: string;
+  category_check?: { matches: boolean; likely_category: string; chosen: string; problem_visible: boolean; issue: string } | null; severity?: string; severity_name?: string; sla_hours?: number;
   ward_name?: string; ward_id?: string; city?: string; nearest_poi?: string | null; nearest_poi_distance_m?: number | null;
   nearby_report?: { ticket: string; status: string; distance_m: number } | null;
 };
