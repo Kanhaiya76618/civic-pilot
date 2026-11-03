@@ -112,6 +112,61 @@ class CivicVisionTriageEngine:
 
         return cracks[:5]
 
+    def detect_solid_waste(self, img_bgr: np.ndarray) -> List[Dict[str, Any]]:
+        """
+        Gate 2C: Municipal Solid Waste & Garbage Dump Detection.
+        Combines neural waste classifier signals with multiscale chromatic entropy 
+        clustering to detect overflowing roadside garbage piles, debris, and refuse heaps.
+        """
+        h, w = img_bgr.shape[:2]
+        total_pixels = h * w
+
+        # 1. Check ImageNet Classifier for Waste Signals
+        waste_signal = False
+        if self.cls_model:
+            try:
+                res = self.cls_model(img_bgr, verbose=False)[0]
+                top5 = [(self.cls_model.names[int(i)].lower(), float(res.probs.data[i])) for i in res.probs.top5]
+                waste_classes = {"garbage_truck", "ashcan", "litter", "trash_can", "waste", "dumpster", "crate"}
+                waste_signal = any(c in waste_classes and score > 0.03 for c, score in top5)
+            except Exception:
+                waste_signal = False
+
+        # 2. Chromatic Cluster Analysis for Multi-colored Plastic Bags & Debris
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        cell_size = max(20, int(min(h, w) * 0.05))
+        grid_h, grid_w = h // cell_size, w // cell_size
+        mask = np.zeros((h, w), dtype=np.uint8)
+
+        # Focus on ground / roadside (lower 75% of scene)
+        for gy in range(int(grid_h * 0.25), grid_h):
+            for gx in range(grid_w):
+                y1, y2 = gy * cell_size, (gy + 1) * cell_size
+                x1, x2 = gx * cell_size, (gx + 1) * cell_size
+                cell_hsv = hsv[y1:y2, x1:x2]
+                if cell_hsv[:, :, 1].std() > 28 and cell_hsv[:, :, 2].std() > 30:
+                    mask[y1:y2, x1:x2] = 255
+
+        k_close = cv2.getStructuringElement(cv2.MORPH_RECT, (int(cell_size * 1.3), int(cell_size * 1.3)))
+        mask_clean = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k_close)
+        contours, _ = cv2.findContours(mask_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        dumps = []
+        for c in contours:
+            area = cv2.contourArea(c)
+            # Threshold: at least 4% of screen if classifier triggered, or 7% otherwise
+            min_thresh = 0.04 if waste_signal else 0.07
+            if area > (total_pixels * min_thresh):
+                x, y, bw, bh = cv2.boundingRect(c)
+                dumps.append({
+                    "label": "Solid Waste / Garbage Dump (Overflowing)",
+                    "confidence": 0.88 if waste_signal else 0.75,
+                    "bbox": [x, y, x + bw, y + bh],
+                    "area_pct": round((area / total_pixels) * 100, 2)
+                })
+
+        return dumps[:3]
+
     def analyze_frame_bgr(self, img_bgr: np.ndarray, frame_name: str = "frame.jpg", output_dir: str = None, category_hint: str = "road") -> Dict[str, Any]:
         """Runs two-gate vision triage on an in-memory BGR frame."""
         h, w, _ = img_bgr.shape
@@ -166,13 +221,23 @@ class CivicVisionTriageEngine:
                     "area_pct": round((box_area / total_pixels) * 100, 2)
                 })
 
-        # B. Structural Concrete & Bridge Fissure Detection
-        structural_cracks = self.detect_structural_cracks(img_bgr)
-        for crack in structural_cracks:
-            x1, y1, x2, y2 = crack["bbox"]
+        # B. Municipal Solid Waste & Garbage Dump Detection
+        garbage_dumps = self.detect_solid_waste(img_bgr)
+        for dump in garbage_dumps:
+            x1, y1, x2, y2 = dump["bbox"]
             box_area = (x2 - x1) * (y2 - y1)
             total_defect_area += box_area
-            detected_defects.append(crack)
+            detected_defects.append(dump)
+
+        # C. Structural Concrete & Bridge Fissure Detection
+        # Suppress crack false alarms if an overflowing garbage dump is present
+        if len(garbage_dumps) == 0:
+            structural_cracks = self.detect_structural_cracks(img_bgr)
+            for crack in structural_cracks:
+                x1, y1, x2, y2 = crack["bbox"]
+                box_area = (x2 - x1) * (y2 - y1)
+                total_defect_area += box_area
+                detected_defects.append(crack)
 
         coverage_pct = round((total_defect_area / total_pixels) * 100, 2)
         coverage_pct = min(100.0, coverage_pct)
@@ -180,6 +245,7 @@ class CivicVisionTriageEngine:
         # Severity Calculation
         has_structural_crack = any("structural" in d["label"].lower() for d in detected_defects)
         has_pothole = any("pothole" in d["label"].lower() for d in detected_defects)
+        has_garbage = any("garbage" in d["label"].lower() or "waste" in d["label"].lower() for d in detected_defects)
 
         if len(detected_defects) == 0:
             severity_score = 5
@@ -188,15 +254,33 @@ class CivicVisionTriageEngine:
             sla_hours = 0
             hud_msg = "HEALTHY INFRASTRUCTURE: NO DEFECTS"
         else:
-            base = 65 if has_structural_crack else (55 if "bridge" in category_hint.lower() else (40 if has_pothole else 35))
+            if has_structural_crack:
+                base = 65
+            elif has_garbage:
+                base = 52
+            elif "bridge" in category_hint.lower():
+                base = 55
+            elif has_pothole:
+                base = 40
+            else:
+                base = 35
+
             count_factor = min(20, len(detected_defects) * 8)
             area_factor = min(20, int(coverage_pct * 2))
             severity_score = min(99, max(25, base + count_factor + area_factor))
 
-            if severity_score >= 80:
-                severity_level = "CRITICAL (STRUCTURAL HAZARD)" if has_structural_crack else "CRITICAL"
+            if has_structural_crack and severity_score >= 80:
+                severity_level = "CRITICAL (STRUCTURAL HAZARD)"
                 hud_color = (0, 0, 255)
-                sla_hours = 2 if has_structural_crack else 4
+                sla_hours = 2
+            elif has_garbage:
+                severity_level = "SOLID WASTE / SANITATION MENACE"
+                hud_color = (0, 165, 255)  # Amber / Orange for SWM
+                sla_hours = 24  # Standard municipal SWM clearing window
+            elif severity_score >= 80:
+                severity_level = "CRITICAL"
+                hud_color = (0, 0, 255)
+                sla_hours = 4
             elif severity_score >= 60:
                 severity_level = "HIGH"
                 hud_color = (0, 140, 255)

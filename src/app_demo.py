@@ -379,9 +379,14 @@ with tab_report:
                         badge_c = "badge-low"
 
                     # Primary Department Selection
+                    has_garbage_defect = (vision_res and any("garbage" in str(d).lower() or "waste" in str(d).lower() for d in vision_res.get("detected_defects", []))) or (video_res and any("garbage" in str(d).lower() or "waste" in str(d).lower() for d in video_res.get("detected_defects", [])))
+                    has_crack_defect = (vision_res and any("crack" in str(d).lower() for d in vision_res.get("detected_defects", []))) or (video_res and any("crack" in str(d).lower() for d in video_res.get("detected_defects", [])))
+
                     if audio_res:
                         dept = audio_res["primary_department"]
-                    elif (vision_res and any("crack" in str(d).lower() for d in vision_res.get("detected_defects", []))) or (video_res and any("crack" in str(d).lower() for d in video_res.get("detected_defects", []))):
+                    elif has_garbage_defect:
+                        dept = "Solid Waste Management (SWM / Municipal Health)"
+                    elif has_crack_defect:
                         dept = "Structural Engineering & Bridges Wing"
                     else:
                         dept = "Public Works Department (PWD / BBMP Roads)"
@@ -451,7 +456,7 @@ with tab_report:
                             "ticket_id": new_ticket_id,
                             "title": f"Incident in {ward_res['ward_name']}",
                             "description": complaint_text.strip() if complaint_text.strip() else (audio_res["transcript"] if audio_res else f"Incident in {ward_res['ward_name']}"),
-                            "category": audio_res["category"] if audio_res else ("ROADS_AND_PAVEMENTS" if not (video_res and any("crack" in str(d).lower() for d in video_res.get("detected_defects", []))) else "STRUCTURAL_HAZARDS"),
+                            "category": audio_res["category"] if audio_res else ("SOLID_WASTE_AND_SANITATION" if has_garbage_defect else ("STRUCTURAL_HAZARDS" if has_crack_defect else "ROADS_AND_PAVEMENTS")),
                             "ward_name": ward_res["ward_name"],
                             "ward_no": ward_res["ward_number"],
                             "engineer": ward_res["executive_engineer_in_charge"],
