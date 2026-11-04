@@ -100,7 +100,10 @@ def session(request: Request) -> tuple[str, dict]:
         SESSIONS.pop(sid, None)
         s = {"expired": True}
         sid = None
-    if not sid:
+    # Test resets and an expired browser cookie can leave a SID in the cookie
+    # jar after its in-memory record has gone away. Treat that exactly like a
+    # new session instead of dereferencing ``None`` below.
+    if not sid or s is None:
         sid = secrets.token_urlsafe(16)
         s = {**(s or {}), "last_seen": now, "logged_in": False, "sch": {}, "grv": {}}
         SESSIONS[sid] = s

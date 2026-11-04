@@ -54,7 +54,8 @@ function useVoiceQuestion(lang: string | null, onText: (text: string, language: 
   const timer = useRef<number | undefined>(undefined);
   const supported = typeof window !== "undefined" && "MediaRecorder" in window && !!navigator.mediaDevices?.getUserMedia;
 
-  async function start() {
+  async function start(hint?: string) {
+    const spoken = hint ?? lang;  // the language just picked on the mic (this render's `lang` is still the old one)
     let stream: MediaStream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch { onError("Microphone permission is needed to ask by voice."); return; }
@@ -64,12 +65,17 @@ function useVoiceQuestion(lang: string | null, onText: (text: string, language: 
     r.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
       clearInterval(timer.current);
-      const blob = new Blob(chunks, { type: r.mimeType || "audio/webm" });
+      const type = r.mimeType || chunks.find((chunk) => chunk.type)?.type || "audio/webm";
+      const blob = new Blob(chunks, { type });
       if (blob.size < 1000) { setState("idle"); return; }
       setState("transcribing");
       const fd = new FormData();
-      fd.append("audio", blob, "question");
-      if (lang) fd.append("language", lang);
+      // Safari commonly records audio/mp4 and Chrome records audio/webm. The
+      // filename must match the MIME type so server-side Whisper providers can
+      // identify the container reliably.
+      const ext = type.includes("mp4") ? ".m4a" : type.includes("ogg") ? ".ogg" : type.includes("mpeg") ? ".mp3" : type.includes("wav") ? ".wav" : ".webm";
+      fd.append("audio", blob, `question${ext}`);
+      if (spoken) fd.append("language", spoken);
       try {
         const res = await fetch("/app/part1/api/transcribe", { method: "POST", body: fd });
         const body = await res.json().catch(() => ({}));
@@ -234,6 +240,7 @@ export default function Schemes() {
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [lang, setLang] = useState(() => LANGS.some((item) => item.code === initialLanguage) ? initialLanguage! : "hi-IN");
   // Until the citizen picks a language, the answer follows the language of their question.
+  const [askLang, setAskLang] = useState(false);  // the mic asks which language first, so speech is written in the right script
   const [langPicked, setLangPicked] = useState(() => LANGS.some((item) => item.code === initialLanguage));
   const [mode, setMode] = useState<"link" | "pdf" | "text">("link");
   const [link, setLink] = useState(() => searchParams.get("url") ?? "");
@@ -349,13 +356,24 @@ export default function Schemes() {
                 <input id="q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. मैं 52 साल का दुकानदार हूँ, क्या मुझे यह मिलेगा?"
                   className="min-h-12 min-w-0 flex-1 bg-transparent text-base text-slate-900 outline-none placeholder:text-slate-400" />
                 {voice.supported && (
-                  <button type="button" onClick={() => (voice.state === "recording" ? voice.stop() : voice.start())} disabled={voice.state === "transcribing"}
+                  <button type="button" onClick={() => (voice.state === "recording" ? voice.stop() : langPicked ? voice.start() : setAskLang(!askLang))} disabled={voice.state === "transcribing"}
                     aria-label={voice.state === "recording" ? "Stop recording" : "Ask by voice"}
                     className={`inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-sm font-semibold ${voice.state === "recording" ? "pulse-ring bg-saffron-500 text-navy-900" : "bg-navy-50 text-navy-700 hover:bg-navy-100"} disabled:opacity-60`}>
                     {voice.state === "recording" ? <><Square className="size-4" />{voice.seconds}s</> : voice.state === "transcribing" ? <LoaderCircle className="size-4 animate-spin" /> : <Mic className="size-5" />}
                   </button>
                 )}
               </div>
+              {askLang && voice.state === "idle" && (
+                <div className="mt-2 rounded-xl bg-navy-50 p-3 ring-1 ring-navy-100">
+                  <p className="text-sm font-semibold text-navy-900">Which language will you speak? <span className="font-normal text-slate-600">Then speak your question.</span></p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {LANGS.map((l) => (
+                      <button key={l.code} type="button" onClick={() => { setLang(l.code); setLangPicked(true); setAskLang(false); voice.start(l.code); }}
+                        className="min-h-9 rounded-full bg-white px-3 text-sm font-semibold text-navy-800 ring-1 ring-navy-200 hover:bg-saffron-50 hover:ring-saffron-300">{l.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {voice.state !== "idle" && (
                 <p className="mt-1.5 text-xs font-semibold text-navy-600" role="status">
                   {voice.state === "recording" ? "Listening… tap ■ when you finish (30 s max)." : "Writing down what you said… please check it before asking."}

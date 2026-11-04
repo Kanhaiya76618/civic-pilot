@@ -223,29 +223,42 @@ async def test_answer_follows_the_question_language_only_when_not_chosen(svc):
     assert chosen["language"] == "hi-IN" and chosen["language_from_question"] is False
 
 
-def stt_service(captured: list):
-    def handler(request: httpx.Request):
-        if request.url.path.endswith("/v1/stt/create"):
-            captured.append(request.content)
-            return httpx.Response(201, json={"generation_id": "job1", "status": "queued"})
-        if request.url.path.endswith("/v1/stt/job1"):
-            return httpx.Response(200, json={"status": "completed", "result": {"results": {"channels": [
-                {"detected_language": "ta", "alternatives": [{"transcript": " எனக்கு ஓய்வூதியம் கிடைக்குமா "}]}]}}})
-        return httpx.Response(404)
-    return httpx.MockTransport(handler)
+async def test_voice_question_prefers_groq_and_keeps_the_browser_filename(svc, monkeypatch):
+    import server.groq as groq
 
+    def heard(request: httpx.Request):
+        assert request.url.path.endswith("/audio/transcriptions")
+        assert request.headers["content-type"].startswith("multipart/form-data")
+        assert b'filename="question.m4a"' in request.content
+        assert b'name="language"' in request.content and b"\r\nta\r\n" in request.content
+        return httpx.Response(200, json={"text": " எனக்கு ஓய்வூதியம் கிடைக்குமா ", "language": "tamil"})
 
-async def test_voice_question_is_transcribed_and_its_language_found(svc):
-    sent: list = []
-    E.transport = stt_service(sent)
-    detected = await svc.transcribe(b"\x1aE\xdf\xa3" + b"0" * 2000, "audio/webm", None)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(groq, "transport", httpx.MockTransport(heard))
+    detected = await svc.transcribe(b"voice", "audio/mp4", "ta-IN", "question.m4a")
     assert detected == {"text": "எனக்கு ஓய்வூதியம் கிடைக்குமா", "language": "ta-IN"}
-    assert b"detect_language" in sent[-1] and b"#g1_whisper-large" in sent[-1]
-    await svc.transcribe(b"0" * 2000, "audio/webm", "hi-IN")
-    assert b'name="language"\r\n\r\nhi' in sent[-1] and b"detect_language" not in sent[-1]
+
+
+async def test_voice_question_uses_aiml_only_when_groq_fails(svc, monkeypatch):
+    import server.groq as groq
+    import server.language as language
+
+    async def unavailable(*args, **kwargs):
+        raise groq.GroqUnavailable("down")
+
+    async def heard(audio, media_type, hint):
+        assert hint == "kn-IN"
+        return {"text": "ಗುಂಡಿ ಇದೆ", "language": "kn-IN"}
+
+    monkeypatch.setattr(groq, "transcribe", unavailable)
+    monkeypatch.setattr(language, "transcribe_audio", heard)
+    assert await svc.transcribe(b"voice", "audio/webm", "kn-IN", "question.webm") == {"text": "ಗುಂಡಿ ಇದೆ", "language": "kn-IN"}
 
 
 async def test_voice_question_needs_a_key_and_short_audio(svc, monkeypatch, tmp_path):
+    import server.groq as groq
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("AIMLAPI_KEY")
     with pytest.raises(HTTPException) as e:
         await svc.transcribe(b"0" * 2000, "audio/webm", None)

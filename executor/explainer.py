@@ -609,8 +609,16 @@ class Explainer:
             label = "Apply with the agent" + (" (sandbox replica)" if portal.is_sandbox else "")
         return {"portal_id": portal.portal_id, "service_id": route.service_id, "label": label, "description": route.description}
 
-    async def transcribe(self, audio: bytes, media_type: str, language: str | None) -> dict:
-        return await transcribe_audio(audio, media_type, language)
+    async def transcribe(self, audio: bytes, media_type: str, language: str | None, filename: str = "voice-note.webm") -> dict:
+        """Use the report flow's Groq Whisper first, then AIML's queued Whisper fallback.
+
+        Importing here avoids a module cycle: ``server.language`` shares Part 1's
+        language map and AIML fallback helper.
+        """
+        from server.language import transcribe as transcribe_voice
+
+        heard = await transcribe_voice(audio, media_type, filename, language)
+        return {"text": heard["text"], "language": heard["language"]}
 
     @staticmethod
     def _shape(doc: dict, d: dict, language: str, script: str, audio_url: str | None, provider: str) -> dict:
@@ -716,7 +724,7 @@ def make_explainer_router(ex: Callable[[], "Executor"]) -> APIRouter:
         if language and language not in LANGUAGES:
             raise HTTPException(400, f"language must be one of {sorted(LANGUAGES)}")
         limiter(request)()
-        return await svc().transcribe(data, media, language or None)
+        return await svc().transcribe(data, media, language or None, audio.filename or "voice-note.webm")
 
     @r.get("/pipeline/latest")
     async def pipeline():

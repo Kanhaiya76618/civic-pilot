@@ -1031,4 +1031,6 @@ export const HI: Record<string, string> = {
   "This video cannot be read here. Please try an MP4 video, or a photo.": "यह वीडियो यहाँ नहीं पढ़ा जा सका। कृपया MP4 वीडियो या फ़ोटो आज़माएँ।",
   "Could not take pictures from this video. Please add a photo instead.": "इस वीडियो से तस्वीरें नहीं ली जा सकीं। कृपया फ़ोटो जोड़ें।",
   "Our YOLOv8 pothole model": "हमारा YOLOv8 गड्ढा मॉडल",
+  "Which language will you speak?": "आप कौन-सी भाषा बोलेंगे?",
+  "Then speak your question.": "फिर अपना प्रश्न बोलें।",
 };

@@ -48,18 +48,36 @@ def language_code(raw: str | None) -> str | None:
     return LANG_BY_NAME.get(raw) or (f"{raw}-IN" if f"{raw}-IN" in LANGUAGES else None)
 
 
-async def transcribe(audio: bytes, media_type: str, filename: str = "voice-note.webm") -> dict:
+async def transcribe(audio: bytes, media_type: str, filename: str = "voice-note.webm",
+                     language_hint: str | None = None) -> dict:
     """{text, language, language_name} in the speaker's own script. Raises HTTPException when nobody can transcribe."""
     if len(audio) > MAX_AUDIO_BYTES:
         raise HTTPException(413, "The voice note is too long to transcribe. Please keep it under about a minute.")
     media_type = media_type.split(";")[0] or "audio/webm"
     try:
-        heard = await groq.transcribe(audio, filename, media_type)
+        heard = await groq.transcribe(audio, filename, media_type, language_hint)
         code = language_code(heard["language"])
-    except groq.GroqUnavailable:
-        heard = await transcribe_audio(audio, media_type, None)
-        code = heard["language"]
-    return {"text": heard["text"], "language": code, "language_name": LANGUAGES.get(code) if code else None}
+    except groq.GroqUnavailable as groq_error:
+        try:
+            heard = await transcribe_audio(audio, media_type, language_hint)
+            code = heard["language"]
+        except HTTPException as fallback_error:
+            if fallback_error.status_code == 413:
+                raise
+            if fallback_error.status_code == 503:
+                raise HTTPException(
+                    503,
+                    "Voice transcription is not configured. Add GROQ_API_KEY or AIMLAPI_KEY to the server.",
+                ) from fallback_error
+            raise HTTPException(
+                502,
+                "We could not transcribe that recording right now. Please try again or type your question.",
+            ) from fallback_error
+    if not code and language_hint in LANGUAGES:
+        code = language_hint
+    if code not in LANGUAGES:
+        code = None  # a language outside our 12: keep the words, just no language label (never block the citizen)
+    return {"text": str(heard.get("text") or "").strip(), "language": code, "language_name": LANGUAGES.get(code) if code else None}
 
 
 async def _ask(system: str, user: str) -> dict:

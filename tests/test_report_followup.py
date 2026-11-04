@@ -242,7 +242,7 @@ def test_voice_note_comes_back_in_its_own_language(client, monkeypatch):
     import server.groq as groq
     import server.language as language
 
-    async def heard(audio, filename, media_type):
+    async def heard(audio, filename, media_type, language=None):
         return {"text": "सड़क पर बड़ा गड्ढा है", "language": "hindi"}
 
     monkeypatch.setattr(groq, "transcribe", heard)

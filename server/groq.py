@@ -47,9 +47,13 @@ async def chat_json(system: str, user: str, max_tokens: int = 1500) -> dict:
         raise GroqUnavailable("Groq did not return a usable answer.") from exc
 
 
-async def transcribe(audio: bytes, filename: str, media_type: str) -> dict:
+async def transcribe(audio: bytes, filename: str, media_type: str, language: str | None = None) -> dict:
     """{text, language}: Whisper on Groq, which detects the language and writes it in its own script."""
     data = {"model": os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo"), "response_format": "verbose_json", "temperature": "0"}
+    if language:
+        # Groq Whisper expects the short BCP-47 language part ("ta"), while
+        # the application consistently exposes the Indian locale ("ta-IN").
+        data["language"] = language.split("-", 1)[0]
     try:
         async with httpx.AsyncClient(timeout=60, transport=transport) as c:
             r = await c.post(f"{BASE}/audio/transcriptions", headers=_auth(), data=data, files={"file": (filename, audio, media_type)})
